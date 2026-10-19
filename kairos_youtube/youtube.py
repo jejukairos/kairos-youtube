@@ -1,6 +1,7 @@
 import json
 import re
 import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 from .errors import DiscoveryError, KairosError, VideoError
@@ -15,8 +16,12 @@ CHANNEL_ID = re.compile(r"^UC[\w-]{22}$")
 
 
 class YouTube:
-    def __init__(self, http, guard, api_key=""):
+    def __init__(self, http, guard, api_key="", verified_metadata=None):
         self.http, self.guard, self.api_key = http, guard, api_key
+        # An explicit, recent public metadata snapshot is used only by smoke.
+        # It contains no transcript or summary; Gemini still receives the URL.
+        self.verified_metadata = verified_metadata
+        self.resolved = {}
 
     def api(self, resource, params):
         if not self.api_key:
@@ -123,10 +128,89 @@ class YouTube:
             if past_cutoff or not token:
                 return videos
 
-    def metadata(self, video):
-        """Read official public watch-page metadata. Never use title/description as AI content."""
+    def video_details(self, video_id):
+        """Use the official Data API when configured; no login/cookie fallback."""
+        if not ID.fullmatch(video_id):
+            raise VideoError("invalid_video_id")
+        if video_id in self.resolved:
+            return self.resolved[video_id]
+        snapshot = self.verified_metadata
+        if snapshot and snapshot.get("video_id") == video_id:
+            try:
+                fresh = (
+                    timedelta(0)
+                    <= datetime.now(timezone.utc) - timestamp(snapshot["verified_at"])
+                    <= timedelta(hours=24)
+                )
+                valid = (
+                    fresh
+                    and snapshot["source"]
+                    == "https://www.youtube.com/watch?v=" + video_id
+                    and snapshot["public"] is True
+                    and snapshot["playable"] is True
+                    and CHANNEL_ID.fullmatch(snapshot["channel_id"])
+                    and type(snapshot["duration_seconds"]) is int
+                    and snapshot["duration_seconds"] > 0
+                    and snapshot["title"]
+                )
+                if not valid:
+                    raise ValueError()
+                details = {
+                    "videoId": video_id,
+                    "channelId": snapshot["channel_id"],
+                    "title": snapshot["title"],
+                    "lengthSeconds": snapshot["duration_seconds"],
+                }
+            except (KeyError, TypeError, ValueError):
+                raise VideoError("smoke_metadata_snapshot_invalid_or_expired") from None
+            self.resolved[video_id] = details
+            return details
+        if self.api_key:
+            result = self.api(
+                "videos", {"id": video_id, "part": "snippet,contentDetails,status"}
+            )
+            try:
+                item = result["items"][0]
+                snippet, content, status = (
+                    item["snippet"],
+                    item["contentDetails"],
+                    item["status"],
+                )
+                if (
+                    item["id"] != video_id
+                    or status["privacyStatus"] != "public"
+                    or status.get("uploadStatus") != "processed"
+                    or snippet.get("liveBroadcastContent", "none") != "none"
+                    or content.get("contentRating", {}).get("ytRating")
+                    == "ytAgeRestricted"
+                ):
+                    raise VideoError("video_not_public_or_ready")
+                duration = re.fullmatch(
+                    r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?",
+                    content["duration"],
+                )
+                if not duration:
+                    raise ValueError()
+                hours, minutes, seconds = (float(x or 0) for x in duration.groups())
+                details = {
+                    "videoId": video_id,
+                    "channelId": snippet["channelId"],
+                    "title": snippet["title"],
+                    "lengthSeconds": int(hours * 3600 + minutes * 60 + seconds),
+                }
+                if (
+                    not CHANNEL_ID.fullmatch(details["channelId"])
+                    or details["lengthSeconds"] <= 0
+                ):
+                    raise ValueError()
+            except (KeyError, IndexError, TypeError, ValueError):
+                raise VideoError("youtube_api_video_metadata_invalid") from None
+            self.resolved[video_id] = details
+            return details
         try:
-            response = self.http.request("GET", video["url"])
+            response = self.http.request(
+                "GET", "https://www.youtube.com/watch?v=" + video_id
+            )
             if response.status != 200:
                 raise VideoError()
             page = response.body.decode("utf-8", errors="replace")
@@ -135,10 +219,9 @@ class YouTube:
                 raise VideoError("video_metadata_unavailable")
             data, _ = json.JSONDecoder().raw_decode(page[match.end() :])
             details = data.get("videoDetails", {})
-            if (
-                details.get("videoId") != video["video_id"]
-                or details.get("channelId") != video["channel_id"]
-            ):
+            if data.get("playabilityStatus", {}).get("status") == "LOGIN_REQUIRED":
+                raise VideoError("youtube_metadata_api_key_required")
+            if details.get("videoId") != video_id:
                 raise VideoError("video_channel_mismatch")
             if data.get("playabilityStatus", {}).get("status") != "OK":
                 raise VideoError("video_not_publicly_playable")
@@ -154,9 +237,17 @@ class YouTube:
             seconds = int(details.get("lengthSeconds", 0))
             if seconds <= 0:
                 raise VideoError("video_duration_unknown")
-            return seconds
+            self.resolved[video_id] = details
+            return details
         except (ValueError, KeyError, TypeError):
             raise VideoError("video_metadata_invalid") from None
+
+    def metadata(self, video):
+        """Metadata only establishes identity/duration, never the summary content."""
+        details = self.video_details(video["video_id"])
+        if details.get("channelId") != video["channel_id"]:
+            raise VideoError("video_channel_mismatch")
+        return int(details["lengthSeconds"])
 
 
 def discover(state, youtube, channels, clock):

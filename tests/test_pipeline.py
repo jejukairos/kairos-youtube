@@ -338,6 +338,104 @@ class DiscoveryTests(Base):
         with self.assertRaises(VideoError):
             YouTube(http, self.g).metadata(video())
 
+    def test_official_api_metadata_uses_separate_key_and_reserves_unit(self):
+        http = Mock()
+        http.request.return_value = response(
+            {
+                "items": [
+                    {
+                        "id": VID,
+                        "snippet": {
+                            "channelId": CID,
+                            "title": "fixture",
+                            "liveBroadcastContent": "none",
+                        },
+                        "contentDetails": {"duration": "PT1H2M3S"},
+                        "status": {
+                            "privacyStatus": "public",
+                            "uploadStatus": "processed",
+                        },
+                    }
+                ]
+            }
+        )
+        yt = YouTube(http, self.g, "separate-youtube-fixture")
+        self.assertEqual(3723, yt.metadata(video()))
+        self.assertEqual(3723, yt.metadata(video()))
+        self.assertEqual(1, http.request.call_count)
+        self.assertEqual(
+            "separate-youtube-fixture",
+            http.request.call_args.kwargs["headers"]["x-goog-api-key"],
+        )
+        self.assertEqual(1, self.s.data["reservations"][0]["units"])
+
+    def test_api_rejects_unlisted_live_missing_and_wrong_channel(self):
+        item = {
+            "id": VID,
+            "snippet": {
+                "channelId": CID,
+                "title": "fixture",
+                "liveBroadcastContent": "none",
+            },
+            "contentDetails": {"duration": "PT2M"},
+            "status": {"privacyStatus": "public", "uploadStatus": "processed"},
+        }
+        variants = [
+            {**item, "status": {**item["status"], "privacyStatus": "unlisted"}},
+            {**item, "snippet": {**item["snippet"], "liveBroadcastContent": "live"}},
+            {**item, "contentDetails": {"duration": "unknown"}},
+            {**item, "snippet": {**item["snippet"], "channelId": "UC" + "z" * 22}},
+        ]
+        for changed in variants:
+            with self.subTest(item=changed), self.assertRaises(VideoError):
+                http = Mock()
+                http.request.return_value = response({"items": [changed]})
+                YouTube(http, self.g, "separate-youtube-fixture").metadata(video())
+        http = Mock()
+        http.request.return_value = response({"items": []})
+        with self.assertRaises(VideoError):
+            YouTube(http, self.g, "fixture").metadata(video())
+
+    def test_cloud_login_requirement_requests_api_key_without_logging_in(self):
+        http = Mock()
+        http.request.return_value = Response(
+            200,
+            b'var ytInitialPlayerResponse = {"playabilityStatus":{"status":"LOGIN_REQUIRED"}}',
+            {},
+        )
+        with self.assertRaises(VideoError) as caught:
+            YouTube(http, self.g).metadata(video())
+        self.assertEqual("youtube_metadata_api_key_required", caught.exception.code)
+        self.assertEqual(1, http.request.call_count)
+
+    def test_smoke_snapshot_is_exact_video_recent_and_never_a_summary(self):
+        current = datetime.now(timezone.utc)
+        snapshot = {
+            "video_id": VID,
+            "channel_id": CID,
+            "title": "fixture",
+            "duration_seconds": 100,
+            "verified_at": current.isoformat(),
+            "source": video()["url"],
+            "public": True,
+            "playable": True,
+        }
+        http = Mock()
+        self.assertEqual(
+            100, YouTube(http, self.g, verified_metadata=snapshot).metadata(video())
+        )
+        http.request.assert_not_called()
+        for changed in [
+            {"verified_at": (current - timedelta(days=2)).isoformat()},
+            {"public": False},
+            {"source": "wrong"},
+            {"channel_id": "UC" + "z" * 22},
+        ]:
+            with self.subTest(changed=changed), self.assertRaises(VideoError):
+                YouTube(
+                    http, self.g, verified_metadata={**snapshot, **changed}
+                ).metadata(video())
+
 
 class GeminiTests(Base):
     def test_one_rpm_account_reuses_count_on_next_available_run(self):

@@ -57,7 +57,7 @@ jobs:
         shell: bash
         run: |
           if [ "$MODE" = "smoke" ]; then
-            python -m kairos_youtube --git-state smoke --video-url "$VIDEO_URL"
+            python -m kairos_youtube --git-state smoke --video-url "$VIDEO_URL" --metadata-file docs/smoke-video-metadata.json
           elif [ "$MODE" = "discover" ]; then
             python -m kairos_youtube --git-state discover
           else

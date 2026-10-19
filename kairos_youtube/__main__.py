@@ -239,6 +239,11 @@ def main():
     p.add_argument("--inspect-feed", action="store_true")
     smoke = sub.add_parser("smoke")
     smoke.add_argument("--video-url", required=True)
+    smoke.add_argument(
+        "--metadata-file",
+        type=Path,
+        help="Recent explicit public metadata snapshot for this single test only",
+    )
     reconcile = sub.add_parser("reconcile")
     reconcile.add_argument("--video-id", required=True)
     reconcile.add_argument(
@@ -315,16 +320,12 @@ def execute(args):
         if not match:
             raise PolicyError("smoke_requires_canonical_public_video_url")
         vid = match.group(1)
-        # Discover the channel from official watch-page videoDetails only.
-        resp = http.request("GET", args.video_url)
-        page = resp.body.decode("utf-8", errors="replace")
-        marker = re.search(r"(?:var\s+)?ytInitialPlayerResponse\s*=\s*", page)
-        if resp.status != 200 or not marker:
-            raise PolicyError("smoke_video_metadata_unavailable")
+        if args.metadata_file:
+            yt.verified_metadata = json.loads(
+                args.metadata_file.read_text(encoding="utf-8")
+            )
         try:
-            details = json.JSONDecoder().raw_decode(page[marker.end() :])[0][
-                "videoDetails"
-            ]
+            details = yt.video_details(vid)
             cid = details["channelId"]
             if cid not in {r["channel_id"] for r in rows}:
                 raise PolicyError("smoke_video_channel_not_registered")
