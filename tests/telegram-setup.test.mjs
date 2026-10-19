@@ -1,10 +1,17 @@
 import assert from 'node:assert/strict';
 import {constants, generateKeyPairSync, privateDecrypt} from 'node:crypto';
 import test from 'node:test';
-import {findRecipient, sealRecipient} from '../tools/telegram-setup.mjs';
+import {findRecipient, sealRecipient, validToken} from '../tools/telegram-setup.mjs';
 
 const now = 1800000000000;
 const challenge = {text: '연결 12345678', issuedAt: now - 10000, expiresAt: now + 10000};
+test('token structure is checked without printing a credential', () => {
+  assert.ok(validToken('123456789:' + 'a'.repeat(35)));
+  assert.ok(validToken(' 123456789:' + 'a'.repeat(35) + '\n'));
+  for (const value of [undefined, 'TELEGRAM_BOT_TOKEN', 'https://api.telegram.org/bot...', 'AQ.example', 'bot123:example']) {
+    assert.equal(validToken(value), false);
+  }
+});
 function update(id = 1234567, overrides = {}) {
   return {message: {date: now / 1000, chat: {id, type: 'private'}, from: {id, is_bot: false}, text: challenge.text, ...overrides}};
 }

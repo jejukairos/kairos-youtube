@@ -28,9 +28,14 @@ export function sealRecipient(chatId, challengeText, publicKey) {
     Buffer.from(JSON.stringify(payload))).toString('base64');
 }
 
+export function validToken(value) {
+  return typeof value === 'string' && /^[0-9]{5,16}:[A-Za-z0-9_-]{20,}$/.test(value.trim());
+}
+
 async function api(method, payload = {}) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
   if (!token) throw new Error('telegram_token_missing');
+  if (!validToken(token)) throw new Error('telegram_token_format_invalid');
   let response;
   try {
     response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
@@ -39,7 +44,7 @@ async function api(method, payload = {}) {
     });
   } catch { throw new Error('telegram_network_error'); }
   if (response.status === 401) throw new Error('telegram_token_invalid');
-  if (!response.ok) throw new Error('telegram_api_failed');
+  if (!response.ok) throw new Error('telegram_api_http_' + response.status);
   let data;
   try { data = await response.json(); } catch { throw new Error('telegram_response_invalid'); }
   if (!data.ok) throw new Error('telegram_api_failed');
@@ -65,7 +70,7 @@ export async function main() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(error => {
-    const safe = /^telegram_[a-z_]+$/.test(error.message) ? error.message : 'telegram_setup_failed_details_redacted';
+    const safe = /^telegram_[a-z0-9_]+$/.test(error.message) ? error.message : 'telegram_setup_failed_details_redacted';
     console.error(safe);
     process.exitCode = 1;
   });
