@@ -516,6 +516,11 @@ class GeminiTests(Base):
             count_request["systemInstruction"], seen[1][1]["systemInstruction"]
         )
         self.assertEqual(
+            count_request["generationConfig"], seen[1][1]["generationConfig"]
+        )
+        schema = seen[1][1]["generationConfig"]["responseSchema"]
+        self.assertIn("insufficient", schema["properties"]["content_access"]["enum"])
+        self.assertEqual(
             video()["url"], seen[1][1]["contents"][0]["parts"][1]["fileData"]["fileUri"]
         )
         self.assertEqual(200, sum(r["seconds"] for r in self.s.data["reservations"]))

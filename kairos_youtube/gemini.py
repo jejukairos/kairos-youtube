@@ -22,6 +22,54 @@ evidence.detail에는 해당 구간에서 직접 확인한 구체적 근거를 �
 """
 
 
+def summary_schema(video_id, seconds):
+    """Constrain output format, while still allowing an insufficient response.
+
+    This does not certify accuracy or rewrite evidence; the original coverage
+    and timeline validation below remains mandatory after generation.
+    """
+    evidence = {
+        "type": "OBJECT",
+        "properties": {
+            "start_seconds": {"type": "NUMBER", "minimum": 0, "maximum": seconds},
+            "end_seconds": {"type": "NUMBER", "minimum": 0, "maximum": seconds},
+            "detail": {"type": "STRING"},
+        },
+        "required": ["start_seconds", "end_seconds", "detail"],
+    }
+    return {
+        "type": "OBJECT",
+        "properties": {
+            "video_id": {"type": "STRING", "enum": [video_id]},
+            "content_access": {
+                "type": "STRING",
+                "enum": ["full_video", "insufficient"],
+            },
+            "coverage_complete": {"type": "BOOLEAN"},
+            "observed_duration_seconds": {"type": "NUMBER"},
+            "bullets": {
+                "type": "ARRAY",
+                "maxItems": 15,
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "text": {"type": "STRING"},
+                        "evidence": {"type": "ARRAY", "minItems": 1, "items": evidence},
+                    },
+                    "required": ["text", "evidence"],
+                },
+            },
+        },
+        "required": [
+            "video_id",
+            "content_access",
+            "coverage_complete",
+            "observed_duration_seconds",
+            "bullets",
+        ],
+    }
+
+
 def validate_summary(data, video, seconds):
     try:
         if (
@@ -133,10 +181,16 @@ class Gemini:
                 }
             ],
         }
+        generation_config = {
+            "maxOutputTokens": self.policy["max_output_tokens"],
+            "responseMimeType": "application/json",
+            "responseSchema": summary_schema(video["video_id"], seconds),
+        }
         count_payload = {
             "generateContentRequest": {
                 "model": "models/" + self.policy["model"],
                 **content,
+                "generationConfig": generation_config,
             }
         }
         signature = hashlib.sha256(
@@ -188,10 +242,7 @@ class Gemini:
             headers=headers,
             payload={
                 **content,
-                "generationConfig": {
-                    "maxOutputTokens": self.policy["max_output_tokens"],
-                    "responseMimeType": "application/json",
-                },
+                "generationConfig": generation_config,
             },
             timeout=240,
         )
