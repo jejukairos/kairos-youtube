@@ -21,7 +21,13 @@ jobs:
   monitor:
     # Public standard runners have no billable execution minutes. Private repos
     # are blocked before runner allocation, regardless of account-wide usage.
-    if: github.event.repository.private == false && vars.KAIROS_ENABLED == 'true'
+    # Manual discovery/smoke tests do not enable scheduled processing. The smoke
+    # command still requires the complete free-tier and rotated-key checks.
+    if: >-
+      github.event.repository.private == false &&
+      (vars.KAIROS_ENABLED == 'true' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (inputs.mode == 'discover' || inputs.mode == 'smoke')))
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:

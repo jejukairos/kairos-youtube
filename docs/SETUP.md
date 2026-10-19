@@ -74,11 +74,11 @@ Get-Content state/free-tier-confirmation.json -Raw | gh secret set FREE_TIER_CON
 
 ## 5. 실제 연결 검증 후 정기 운영
 
-1. Variables에 `KAIROS_ENABLED=true`를 등록합니다. Secrets 미등록·무료 확인 실패 상태에서는 영상 분석이 차단됩니다.
+1. `KAIROS_ENABLED`는 비워 두거나 `false`로 둡니다. 수동 `discover`와 `smoke`만 실행할 수 있으며 예약 실행은 계속 꺼져 있습니다. Secrets 미등록·무료 확인 실패 상태에서는 영상 분석이 차단됩니다.
 2. Actions → Kairos YouTube twice daily → Run workflow → `discover`. 32개 채널 조회와 `kairos-youtube-state` 브랜치 생성을 확인합니다. 과거 영상은 발송되지 않습니다.
 3. 같은 워크플로 → `smoke`. 등록된 채널의 공개 영상 **한 개**의 `https://www.youtube.com/watch?v=VIDEO_ID` URL을 입력합니다.
 4. 실제 Gemini 응답이 영상 내용을 반영하는지, 숫자와 주장·근거·전망 조건을 확인합니다. 봇이 개인 Chat ID에 보낸 요약과 원본 URL을 검토합니다. 성공한 테스트 영상도 동일 상태에 기록해 정기 실행에서 재분석·재발송하지 않습니다.
-5. `run`을 수동 실행하고 신규 영상·브리핑·미처리 건수를 확인합니다. 이후 cron은 12:30/21:30 KST에 예약됩니다.
+5. 실제 영상 분석·Telegram 요약 도착을 확인한 뒤 Variables에 `KAIROS_ENABLED=true`를 등록합니다. `run`을 수동 실행하고 신규 영상·브리핑·미처리 건수를 확인합니다. 이후 cron은 12:30/21:30 KST에 예약됩니다.
 6. Actions 실행 기록에서 실제 예약 실행까지 확인해야 배포 검증이 완료됩니다. 워크플로 파일 생성만으로 예약 배포 완료라고 표시하지 않습니다.
 
 정기 실행은 서버 측 API 키를 사용하며 Google 로그인 승인·SMS·CAPTCHA·Authenticator 입력을 요구하지 않습니다. 인증 오류는 중단하고 새 키 등록을 기다립니다. 로그인 쿠키·Google 브라우저 세션은 저장하지 않습니다.
