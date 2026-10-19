@@ -56,6 +56,17 @@ export async function main() {
   if (!bot.is_bot || !/^[A-Za-z0-9_]+$/.test(bot.username || '')) throw new Error('telegram_bot_identity_invalid');
   console.log(JSON.stringify({status: 'bot_verified', bot_username: bot.username}));
   if (process.env.SETUP_MODE === 'identify') return;
+  if (process.env.SETUP_MODE === 'test') {
+    const cid = process.env.TELEGRAM_CHAT_ID;
+    if (!/^[1-9][0-9]{4,15}$/.test(cid || '')) throw new Error('telegram_chat_secret_invalid');
+    // One attempt only; an uncertain network result must never trigger a resend.
+    const sent = await api('sendMessage', {chat_id: cid,
+      text: '✅ Kairos 텔레그램 연결을 확인했습니다.\n\n이 대화로 유튜브 요약을 받게 됩니다. Gemini 영상 분석과 정기 실행은 검증이 끝난 뒤 활성화합니다.',
+      link_preview_options: {is_disabled: true}});
+    if (String(sent.chat?.id) !== cid || !Number.isSafeInteger(sent.message_id)) throw new Error('telegram_test_delivery_uncertain');
+    console.log('telegram_test_sent');
+    return;
+  }
   if (process.env.SETUP_MODE !== 'link') throw new Error('telegram_setup_mode_invalid');
   const webhook = await api('getWebhookInfo');
   if (webhook.url) throw new Error('telegram_webhook_configured_stop');

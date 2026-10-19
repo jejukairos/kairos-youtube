@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [identify, link]
+        options: [identify, link, test]
         default: identify
 permissions:
   contents: read
@@ -24,6 +24,7 @@ jobs:
         env:
           SETUP_MODE: ${{ inputs.mode }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_LINK_CHALLENGE: ${{ secrets.TELEGRAM_LINK_CHALLENGE }}
           TELEGRAM_LINK_PUBLIC_KEY: ${{ vars.TELEGRAM_LINK_PUBLIC_KEY }}
         run: node tools/telegram-setup.mjs

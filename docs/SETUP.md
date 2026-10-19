@@ -42,6 +42,8 @@ Telegram에서 해당 봇과 개인 대화를 시작하고 `/start`를 먼저 �
 
 개인 Chat ID는 실행 전에 로컬에서 생성한 RSA-3072 공개키로 암호화하여 로그에 내보냅니다. 복호화 개인키는 Git 제외 `state/`에만 보관하고, 로컬 보조 도구가 `TELEGRAM_CHAT_ID` Secret을 등록한 후 임시 키·연결 Secret·공개키 Variable을 정리합니다. 공개 로그에 토큰·개인 대화 원문·Chat ID를 그대로 출력하지 않습니다. 에이전트가 이 작업을 처리하며 사용자는 안내된 문장만 자신의 봇에 보내면 됩니다.
 
+GitHub 실행기 배정이 지연되는 경우 `tools/telegram-link-wait.mjs RUN_ID`가 현재 요청한 연결 작업을 로컬에서 최대 3시간 동안 기다릴 수 있습니다. 성공하면 수신자 Secret을 등록하고 연결 테스트를 한 번 요청합니다. 대기 진행 상태는 Git 제외 `state/telegram-link-progress.json`에 저장하며, 기존에 보낸 문장과 임시 개인키를 그대로 사용합니다. 테스트는 고정된 개인 Chat ID에 한 번만 발송하며, 네트워크 결과가 불명확해도 자동 재발송하지 않습니다. 이 보조 작업은 Gemini 분석이나 정기 실행을 활성화하지 않습니다.
+
 ## 4. 무료 프로젝트 확인 기록
 
 현재 확인된 값은 `ACTUAL_RPM=5`, `ACTUAL_TPM=250000`, `ACTUAL_RPD=20`입니다. 아래 명령에 등록 시점의 실제 값을 넣습니다. `TPD_CAP`은 Google TPD 제한이 있으면 그 이하, 없으면 직접 정한 보수적 일일 토큰 상한입니다. Gemini 전용 무료 프로젝트를 사용합니다. 관측한 프로젝트 ID는 공개 문서 대신 Git 제외 경로 `state/free-tier-observation.json`에 보관했습니다.

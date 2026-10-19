@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {constants, generateKeyPairSync, privateDecrypt} from 'node:crypto';
 import test from 'node:test';
-import {findRecipient, sealRecipient, validToken} from '../tools/telegram-setup.mjs';
+import {findRecipient, main, sealRecipient, validToken} from '../tools/telegram-setup.mjs';
 
 const now = 1800000000000;
 const challenge = {text: '연결 12345678', issuedAt: now - 10000, expiresAt: now + 10000};
@@ -40,3 +40,37 @@ test('public log envelope requires the matching private key', () => {
   const other = generateKeyPairSync('rsa', {modulusLength: 2048});
   assert.throws(() => privateDecrypt(other.privateKey, Buffer.from(sealed, 'base64')));
 });
+for (const failDelivery of [false, true]) {
+  test(`connection test sends once to configured recipient (network failure=${failDelivery})`, async () => {
+    const originalFetch = globalThis.fetch;
+    const originalLog = console.log;
+    const keys = ['SETUP_MODE', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'];
+    const previous = Object.fromEntries(keys.map(k => [k, process.env[k]]));
+    let sends = 0;
+    try {
+      process.env.SETUP_MODE = 'test';
+      process.env.TELEGRAM_BOT_TOKEN = '123456789:' + 'a'.repeat(35);
+      process.env.TELEGRAM_CHAT_ID = '1234567';
+      console.log = () => {};
+      globalThis.fetch = async (url, options) => {
+        if (url.endsWith('/getMe')) return {ok: true, status: 200,
+          json: async () => ({ok: true, result: {is_bot: true, username: 'FixtureBot'}})};
+        assert.ok(url.endsWith('/sendMessage'));
+        sends++;
+        assert.equal(JSON.parse(options.body).chat_id, '1234567');
+        if (failDelivery) throw new Error('sensitive URL must not appear in the error');
+        return {ok: true, status: 200, json: async () => ({ok: true, result: {chat: {id: 1234567}, message_id: 42}})};
+      };
+      if (failDelivery) await assert.rejects(main(), {message: 'telegram_network_error'});
+      else await main();
+      assert.equal(sends, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+      console.log = originalLog;
+      for (const k of keys) {
+        if (previous[k] === undefined) delete process.env[k];
+        else process.env[k] = previous[k];
+      }
+    }
+  });
+}
