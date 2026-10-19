@@ -19,6 +19,12 @@ test('only exact recent personal challenge identifies recipient', () => {
   assert.equal(findRecipient([update()], challenge, now), '1234567');
   assert.throws(() => findRecipient([update(1234567, {text: '/start'})], challenge, now));
 });
+test('mobile whitespace and full-width digits preserve the same secret challenge', () => {
+  for (const text of ['연결12345678', '연결　１２３４５６７８', '12345678', '연결\n12345678']) {
+    assert.equal(findRecipient([update(1234567, {text})], challenge, now), '1234567');
+  }
+  assert.throws(() => findRecipient([update(1234567, {text: '연결 12345679'})], challenge, now));
+});
 test('groups, other senders, bots and stale messages are rejected', () => {
   for (const override of [{chat: {id: -1234567, type: 'group'}}, {from: {id: 9876543}},
     {from: {id: 1234567, is_bot: true}}, {date: (now - 20000) / 1000}]) {

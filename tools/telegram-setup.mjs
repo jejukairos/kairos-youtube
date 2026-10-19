@@ -10,11 +10,15 @@ export function findRecipient(updates, challenge, now = Date.now()) {
     throw new Error('telegram_link_challenge_expired_or_invalid');
   }
   const ids = new Set();
+  const normalize = value => typeof value === 'string'
+    ? value.normalize('NFKC').replace(/[\s\u200b-\u200d\ufeff]/g, '') : '';
+  const expected = normalize(challenge.text);
   for (const update of updates) {
     const m = update.message;
+    const received = normalize(m?.text);
     if (m?.chat?.type !== 'private' || m.from?.is_bot || m.from?.id !== m.chat.id ||
         !Number.isSafeInteger(m.chat.id) || m.chat.id <= 0 ||
-        m.text?.trim() !== challenge.text || !Number.isFinite(m.date) ||
+        (received !== expected && received !== expected.slice(2)) || !Number.isFinite(m.date) ||
         m.date * 1000 < challenge.issuedAt - 2000 || m.date * 1000 > now + 2000) continue;
     ids.add(String(m.chat.id));
   }
