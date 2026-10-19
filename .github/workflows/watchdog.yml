@@ -1,0 +1,31 @@
+name: Kairos schedule watchdog
+on:
+  schedule:
+    - cron: '0 0,6,15,18 * * *'
+  workflow_run:
+    workflows: ['Kairos YouTube twice daily']
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: kairos-youtube-state
+  cancel-in-progress: false
+jobs:
+  health:
+    if: github.event.repository.private == false && vars.KAIROS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m kairos_youtube --git-state watchdog

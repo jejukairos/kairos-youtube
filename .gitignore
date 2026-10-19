@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+state/
+.coverage
+.ruff_cache/
+*.log
+*.tmp

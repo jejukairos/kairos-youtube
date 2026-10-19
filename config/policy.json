@@ -1,0 +1,19 @@
+{
+  "FREE_ONLY": true,
+  "MAX_SPEND_USD": 0,
+  "ALLOW_PAID_FALLBACK": false,
+  "AI_PROVIDER": "gemini",
+  "model": "gemini-3.8-flash",
+  "pricing_checked_on": "2026-10-19",
+  "pricing_review_days": 30,
+  "free_video_seconds_per_day": 28800,
+  "max_video_seconds": 7200,
+  "max_output_tokens": 8192,
+  "max_state_bytes": 8388608,
+  "max_git_storage_bytes": 104857600,
+  "max_run_seconds": 1200,
+  "max_videos_per_run": 10,
+  "bootstrap_lookback_hours": 0,
+  "youtube_units_per_day": 1000,
+  "priority_aging_days": 3
+}

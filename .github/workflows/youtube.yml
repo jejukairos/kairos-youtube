@@ -1,0 +1,62 @@
+name: Kairos YouTube twice daily
+on:
+  schedule:
+    - cron: '30 3,12 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [discover, run, smoke]
+        default: discover
+      video_url:
+        description: Public registered-channel video URL for one-video smoke test
+        type: string
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: kairos-youtube-state
+  cancel-in-progress: false
+jobs:
+  monitor:
+    # Public standard runners have no billable execution minutes. Private repos
+    # are blocked before runner allocation, regardless of account-wide usage.
+    if: github.event.repository.private == false && vars.KAIROS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      FREE_ONLY: 'true'
+      MAX_SPEND_USD: '0'
+      ALLOW_PAID_FALLBACK: 'false'
+      AI_PROVIDER: gemini
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      FREE_TIER_CONFIRMATION: ${{ secrets.FREE_TIER_CONFIRMATION }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline regression tests
+        run: python -m unittest discover -s tests -v
+      - name: Discover, summarize and deliver
+        env:
+          MODE: ${{ github.event.inputs.mode || 'run' }}
+          VIDEO_URL: ${{ github.event.inputs.video_url }}
+        shell: bash
+        run: |
+          if [ "$MODE" = "smoke" ]; then
+            python -m kairos_youtube --git-state smoke --video-url "$VIDEO_URL"
+          elif [ "$MODE" = "discover" ]; then
+            python -m kairos_youtube --git-state discover
+          else
+            python -m kairos_youtube --git-state run
+          fi
+      - name: Safe failure status
+        if: failure()
+        run: echo '::error::Kairos run failed. Check redacted status and next watchdog notification.'

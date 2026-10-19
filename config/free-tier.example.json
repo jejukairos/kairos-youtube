@@ -1,0 +1,17 @@
+{
+  "project_id": "",
+  "tier": "unverified",
+  "billing_enabled": null,
+  "key_rotated": false,
+  "key_sha256": "",
+  "confirmed_at": "",
+  "expires_at": "",
+  "model": "gemini-3.8-flash",
+  "rpm": 0,
+  "tpm": 0,
+  "rpd": 0,
+  "tokens_per_day": 0,
+  "youtube_video_seconds_per_day": 0,
+  "dedicated_project": false,
+  "source": "AI Studio project tier + Cloud Billing account status + active rate limits"
+}
