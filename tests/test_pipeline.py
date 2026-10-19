@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from kairos_youtube.errors import (
     AuthError,
@@ -108,6 +108,16 @@ class Base(unittest.TestCase):
 
 
 class SecurityTests(Base):
+    def test_registered_exposed_key_is_blocked_before_provider_access(self):
+        with patch(
+            "kairos_youtube.guard.REVOKED_KEY_SUFFIX_SHA256", {fingerprint(KEY[-12:])}
+        ):
+            with self.assertRaises(PolicyError) as caught:
+                verify_free_tier(self.p, self.c, KEY, NOW)
+            self.assertEqual(
+                "exposed_gemini_key_must_be_rotated", caught.exception.code
+            )
+
     def test_missing_key_never_verifies(self):
         with self.assertRaises(PolicyError):
             verify_free_tier(self.p, self.c, "", NOW)

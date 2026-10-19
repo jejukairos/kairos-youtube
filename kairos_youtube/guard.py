@@ -8,6 +8,11 @@ from .errors import PolicyError, QuotaError
 
 UTC = timezone.utc
 PACIFIC = ZoneInfo("America/Los_Angeles")
+# One-way digest of a short suffix of a credential exposed in this session.
+# Neither the original credential nor its literal suffix is stored in source.
+REVOKED_KEY_SUFFIX_SHA256 = {
+    "e4ea7e3088d56b679d2c63a20a06688fe281156d2f9dbc2f40b05c4f0fb60b71"
+}
 
 
 def timestamp(value):
@@ -19,6 +24,15 @@ def timestamp(value):
 
 def fingerprint(key):
     return hashlib.sha256(key.encode()).hexdigest()
+
+
+def check_key_safety(key):
+    if not key:
+        raise PolicyError("gemini_key_missing")
+    if len(key) < 30 or any(char.isspace() for char in key):
+        raise PolicyError("gemini_key_format_invalid")
+    if fingerprint(key[-12:]) in REVOKED_KEY_SUFFIX_SHA256:
+        raise PolicyError("exposed_gemini_key_must_be_rotated")
 
 
 def validate_policy(policy):
@@ -44,8 +58,7 @@ def validate_policy(policy):
 
 def verify_free_tier(policy, confirmation, key, now):
     validate_policy(policy)
-    if not key:
-        raise PolicyError("gemini_key_missing")
+    check_key_safety(key)
     try:
         checked = timestamp(policy["pricing_checked_on"] + "T00:00:00+00:00")
         start, end = (

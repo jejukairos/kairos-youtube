@@ -297,7 +297,10 @@ def execute(args):
         s.save()
         print("delivery_reconciled")
         return 0
-    confirmation, key = load_confirmation(), os.environ.get("GEMINI_API_KEY", "")
+    confirmation, key = (
+        load_confirmation(),
+        os.environ.get("GEMINI_API_KEY", "").strip(),
+    )
     guard = Guard(s, config, confirmation, now)
     yt = YouTube(http, guard, os.environ.get("YOUTUBE_API_KEY", ""))
     model = Gemini(http, guard, config, key)

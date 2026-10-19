@@ -1,0 +1,21 @@
+name: Kairos Gemini secret safety check
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  key-safety:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline security regression tests
+        run: python -m unittest discover -s tests -q
+      - name: Check registered key without an API call
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python tools/check-gemini-secret.py

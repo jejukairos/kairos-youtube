@@ -1,6 +1,6 @@
 # Kairos YouTube Intelligence v4.3
 
-32개 공개 YouTube 채널의 새 영상을 Gemini Developer API로 분석해 개인 Telegram으로 전달합니다. **코드·Mock 검증·공개 YouTube 연결 검증을 완료했으며, 실제 Gemini·Telegram 연결과 예약 실행은 아직 완료되지 않았습니다.**
+32개 공개 YouTube 채널의 새 영상을 Gemini Developer API로 분석해 개인 Telegram으로 전달합니다. **코드·Mock 검증·공개 YouTube 조회·Telegram 연결 및 실제 테스트 발송을 완료했으며, 실제 Gemini 영상 분석과 예약 실행은 아직 완료되지 않았습니다.**
 
 운영 준비 저장소: https://github.com/jejukairos/kairos-youtube . `GEMINI_API_KEY` Secret 등록과 GitHub 인증을 확인했습니다. Secret 값은 읽지 않았으며, 키 교체 여부와 무료 프로젝트 확인 기록의 연결 검증 전에는 실제 AI 호출을 차단합니다. `KAIROS_ENABLED`는 아직 활성화하지 않았습니다.
 
