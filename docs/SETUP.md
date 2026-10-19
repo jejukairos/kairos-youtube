@@ -34,7 +34,13 @@ Settings → Secrets and variables → Actions → New repository secret:
 | `FREE_TIER_CONFIRMATION` | 아래에서 생성한 무료 프로젝트 확인 JSON |
 | `YOUTUBE_API_KEY` | 선택 사항. 피드 누락 복구용 별도 YouTube Data API 키 |
 
-Telegram에서 해당 봇과 개인 대화를 시작하고 `/start`를 먼저 보냅니다. Chat ID는 사용자가 Telegram Bot API `getUpdates` 결과에서 자신의 대화 항목을 확인해 등록합니다. 토큰이 포함된 API URL을 공유하거나 브라우저 기록·스크린샷에 남기지 마세요. 프로그램은 채널/그룹 이름이나 메시지 속 임의 Chat ID로 수신자를 바꾸지 않습니다.
+Telegram에서 해당 봇과 개인 대화를 시작하고 `/start`를 먼저 보냅니다. 수신자 번호를 직접 찾을 필요 없이, 에이전트가 안내한 `연결` 문장을 본인의 봇에 보내서 Chat ID를 안전하게 확인할 수 있습니다. 토큰이 포함된 API URL을 공유하거나 브라우저 기록·스크린샷에 남기지 마세요. 프로그램은 채널/그룹 이름이나 메시지 속 임의 Chat ID로 수신자를 바꾸지 않습니다.
+
+### 개인 대화 연결 보조 기능
+
+`Kairos private Telegram setup` 워크플로는 수동으로만 실행하며 Gemini를 호출하거나 예약 실행을 활성화하지 않습니다. `identify`는 Bot API `getMe`로 토큰이 유효한지 확인하고 공개 봇 사용자 이름만 출력합니다. `link`는 최대 12시간 유효한 임시 연결 문장을 정확히 보낸 개인 대화 한 곳만 찾습니다. 그룹·봇 작성 메시지·오래된 메시지·여러 수신자는 거부합니다. `getUpdates`에 offset을 지정해 기존 메시지를 확인 처리하거나 기존 webhook을 삭제하지 않습니다.
+
+개인 Chat ID는 실행 전에 로컬에서 생성한 RSA-3072 공개키로 암호화하여 로그에 내보냅니다. 복호화 개인키는 Git 제외 `state/`에만 보관하고, 로컬 보조 도구가 `TELEGRAM_CHAT_ID` Secret을 등록한 후 임시 키·연결 Secret·공개키 Variable을 정리합니다. 공개 로그에 토큰·개인 대화 원문·Chat ID를 그대로 출력하지 않습니다. 에이전트가 이 작업을 처리하며 사용자는 안내된 문장만 자신의 봇에 보내면 됩니다.
 
 ## 4. 무료 프로젝트 확인 기록
 

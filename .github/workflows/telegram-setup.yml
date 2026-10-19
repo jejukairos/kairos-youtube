@@ -1,0 +1,29 @@
+name: Kairos private Telegram setup
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [identify, link]
+        default: identify
+permissions:
+  contents: read
+jobs:
+  setup:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline linking regression checks
+        run: node --test tests/telegram-setup.test.mjs
+      - name: Verify bot or seal recipient
+        env:
+          SETUP_MODE: ${{ inputs.mode }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_LINK_CHALLENGE: ${{ secrets.TELEGRAM_LINK_CHALLENGE }}
+          TELEGRAM_LINK_PUBLIC_KEY: ${{ vars.TELEGRAM_LINK_PUBLIC_KEY }}
+        run: node tools/telegram-setup.mjs
