@@ -22,7 +22,7 @@ jobs:
     # Public standard runners have no billable execution minutes. Private repos
     # are blocked before runner allocation, regardless of account-wide usage.
     if: github.event.repository.private == false && vars.KAIROS_ENABLED == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       FREE_ONLY: 'true'
