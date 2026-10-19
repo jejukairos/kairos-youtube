@@ -1,7 +1,7 @@
-name: Kairos YouTube twice daily
+name: Kairos YouTube four times daily
 on:
   schedule:
-    - cron: '30 3,12 * * *'
+    - cron: '0 2,6,11,14 * * *'
   workflow_dispatch:
     inputs:
       mode:

@@ -1,5 +1,5 @@
 import time
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 from .errors import AuthError, KairosError, PolicyError, QuotaError, TelegramError
 from .guard import fingerprint, timestamp, verify_free_tier
@@ -138,16 +138,23 @@ def run(
     return result
 
 
+def briefing_slot(started, namespace="briefing"):
+    """One persistent delivery slot per 11:00/15:00/20:00/23:00 KST run."""
+    utc = started.astimezone(timezone.utc)
+    hours = (2, 6, 11, 14)
+    prior = [hour for hour in hours if hour <= utc.hour]
+    if prior:
+        hour = prior[-1]
+    else:
+        utc -= timedelta(days=1)
+        hour = hours[-1]
+    return f"{namespace}:{utc.date().isoformat()}-{hour:02d}"
+
+
 def send_briefing(state, telegram, started, result, namespace="briefing"):
     if telegram is None:
         return
-    # Twice-daily UTC slots correspond to 12:30 / 21:30 KST.
-    slot = (
-        namespace
-        + ":"
-        + started.date().isoformat()
-        + ("-03" if started.hour < 12 else "-12")
-    )
+    slot = briefing_slot(started, namespace)
     previous = state.data["briefings"].get(slot)
     if previous and previous["status"] in ("sent", "sending", "delivery_uncertain"):
         return

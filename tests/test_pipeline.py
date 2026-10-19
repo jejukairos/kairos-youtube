@@ -19,7 +19,7 @@ from kairos_youtube.errors import (
 from kairos_youtube.gemini import Gemini, validate_summary
 from kairos_youtube.guard import Guard, fingerprint, timestamp, verify_free_tier
 from kairos_youtube.http import Http, Response
-from kairos_youtube.runner import run
+from kairos_youtube.runner import briefing_slot, run, send_briefing
 from kairos_youtube.state import State
 from kairos_youtube.telegram import Telegram, deliver, render, units
 from kairos_youtube.youtube import YouTube, discover
@@ -603,6 +603,33 @@ class DeliveryTests(Base):
 
 
 class RunnerTests(Base):
+    def test_four_daily_briefings_are_distinct_and_each_rerun_is_suppressed(self):
+        tg = Mock()
+        tg.send.return_value = 42
+        result = {
+            "sent": 0,
+            "pending": 0,
+            "delivery_uncertain": 0,
+            "errors": [],
+            "reason": None,
+        }
+        for hour in (2, 6, 11, 14):
+            started = NOW.replace(hour=hour, minute=0)
+            send_briefing(self.s, tg, started, result)
+            send_briefing(self.s, tg, started + timedelta(minutes=20), result)
+        self.assertEqual(4, tg.send.call_count)
+        self.assertEqual(4, len(self.s.data["briefings"]))
+
+    def test_briefing_slots_roll_to_previous_run_before_first_slot(self):
+        before_first = NOW.replace(hour=1, minute=59)
+        prior_evening = (NOW - timedelta(days=1)).replace(hour=14, minute=0)
+        self.assertEqual(briefing_slot(prior_evening), briefing_slot(before_first))
+        self.assertNotEqual(
+            briefing_slot(before_first), briefing_slot(NOW.replace(hour=2, minute=0))
+        )
+        kst = timezone(timedelta(hours=9))
+        self.assertEqual(briefing_slot(NOW), briefing_slot(NOW.astimezone(kst)))
+
     def test_rejected_evidence_is_reported_as_processing_failure(self):
         yt, gemini, tg = self.setup_clients()
         gemini.summarize.side_effect = VideoError("invalid_video_evidence")
