@@ -46,7 +46,7 @@ GitHub 실행기 배정이 지연되는 경우 `tools/telegram-link-wait.mjs RUN
 
 ## 4. 무료 프로젝트 확인 기록
 
-현재 확인된 값은 `ACTUAL_RPM=5`, `ACTUAL_TPM=250000`, `ACTUAL_RPD=20`입니다. 아래 명령에 등록 시점의 실제 값을 넣습니다. `TPD_CAP`은 Google TPD 제한이 있으면 그 이하, 없으면 직접 정한 보수적 일일 토큰 상한입니다. Gemini 전용 무료 프로젝트를 사용합니다. 관측한 프로젝트 ID는 공개 문서 대신 Git 제외 경로 `state/free-tier-observation.json`에 보관했습니다.
+현재 확인된 값은 `ACTUAL_RPM=5`, `ACTUAL_TPM=250000`, `ACTUAL_RPD=20`입니다. 아래 명령에 등록 시점의 실제 값을 넣습니다. `TPD_CAP`은 Google TPD 제한이 있으면 그 이하, 없으면 직접 정한 보수적 일일 토큰 상한입니다. Gemini 전용 무료 프로젝트를 권장합니다. 공유 프로젝트의 다른 사용량은 로컬 기록에 포함되지 않으며, Google 할당량 오류 시 보류합니다. 관측한 프로젝트 ID는 공개 문서 대신 Git 제외 경로 `state/free-tier-observation.json`에 보관했습니다.
 
 ```powershell
 python -m kairos_youtube confirm-free-tier `
@@ -54,7 +54,6 @@ python -m kairos_youtube confirm-free-tier `
   --tier free `
   --billing-disabled CONFIRMED `
   --old-key-revoked CONFIRMED `
-  --dedicated-project CONFIRMED `
   --rpm ACTUAL_RPM `
   --tpm ACTUAL_TPM `
   --rpd ACTUAL_RPD `

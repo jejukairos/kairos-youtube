@@ -75,7 +75,6 @@ def confirm(args):
         args.tier != "free"
         or args.billing_disabled != "CONFIRMED"
         or args.old_key_revoked != "CONFIRMED"
-        or args.dedicated_project != "CONFIRMED"
     ):
         raise PolicyError()
     if any(
@@ -99,7 +98,7 @@ def confirm(args):
         "expires_at": (now() + timedelta(days=7)).isoformat(),
         "model": policy()["model"],
         "key_sha256": fingerprint(key),
-        "dedicated_project": True,
+        "dedicated_project": args.dedicated_project == "CONFIRMED",
         "rpm": args.rpm,
         "tpm": args.tpm,
         "rpd": args.rpd,
@@ -253,7 +252,7 @@ def main():
     c.add_argument("--tier", required=True)
     c.add_argument("--billing-disabled", required=True)
     c.add_argument("--old-key-revoked", required=True)
-    c.add_argument("--dedicated-project", required=True)
+    c.add_argument("--dedicated-project", default="UNVERIFIED")
     for flag in ("rpm", "tpm", "rpd", "tokens-per-day", "video-seconds-per-day"):
         c.add_argument("--" + flag, type=int, required=True)
     args = parser.parse_args()

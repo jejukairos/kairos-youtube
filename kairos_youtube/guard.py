@@ -73,7 +73,6 @@ def verify_free_tier(policy, confirmation, key, now):
             and confirmation["tier"] == "free"
             and confirmation["billing_enabled"] is False
             and confirmation["key_rotated"] is True
-            and confirmation["dedicated_project"] is True
             and confirmation["project_id"]
             and confirmation["model"] == policy["model"]
             and confirmation["key_sha256"] == fingerprint(key)

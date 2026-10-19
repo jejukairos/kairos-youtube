@@ -129,7 +129,6 @@ class SecurityTests(Base):
             ("billing_enabled", None),
             ("key_rotated", False),
             ("key_sha256", "other"),
-            ("dedicated_project", False),
             ("rpd", 0),
             ("expires_at", (NOW - timedelta(seconds=1)).isoformat()),
             ("expires_at", (NOW + timedelta(days=100)).isoformat()),
@@ -158,6 +157,12 @@ class SecurityTests(Base):
 
     def test_valid_confirmation(self):
         verify_free_tier(self.p, self.c, KEY, NOW)
+
+    def test_shared_free_project_still_requires_no_billing(self):
+        c = {**self.c, "dedicated_project": None}
+        verify_free_tier(self.p, c, KEY, NOW)
+        with self.assertRaises(PolicyError):
+            verify_free_tier(self.p, {**c, "billing_enabled": True}, KEY, NOW)
 
     def test_auth_error_in_400_response_is_classified(self):
         with self.assertRaises(AuthError):
