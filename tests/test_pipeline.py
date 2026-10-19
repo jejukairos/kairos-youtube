@@ -603,6 +603,15 @@ class DeliveryTests(Base):
 
 
 class RunnerTests(Base):
+    def test_rejected_evidence_is_reported_as_processing_failure(self):
+        yt, gemini, tg = self.setup_clients()
+        gemini.summarize.side_effect = VideoError("invalid_video_evidence")
+        result = self.execute(yt, gemini, tg)
+        self.assertEqual(["invalid_video_evidence"], result["processing_errors"])
+        self.assertEqual(0, result["sent"])
+        self.assertEqual("pending", self.s.data["videos"][VID]["status"])
+        self.assertIn("일부 처리 보류", tg.send.call_args.args[0])
+
     def test_no_telegram_credentials_means_no_google_requests(self):
         yt, gemini, _ = self.setup_clients()
         result = self.execute(yt, gemini, None)

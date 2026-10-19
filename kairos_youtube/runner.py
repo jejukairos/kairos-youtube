@@ -49,6 +49,7 @@ def run(
             state.data["pause"] = {"fingerprint": fingerprint(key), "reason": reason}
         state.error(reason, clock())
     count, sent = 0, 0
+    processing_errors = []
     queued = list(state.data["videos"].values())
     queued.sort(
         key=lambda v: (
@@ -76,6 +77,7 @@ def run(
                 sent += 1
             except TelegramError as error:
                 state.error(error.code, clock(), video["video_id"])
+                processing_errors.append(error.code)
             continue
         if reason or count >= (
             max_videos if max_videos is not None else policy["max_videos_per_run"]
@@ -99,6 +101,7 @@ def run(
             deliver(state, video, telegram)
             sent += 1
         except KairosError as error:
+            processing_errors.append(error.code)
             if video["status"] == "analyzing":
                 video["status"] = "pending"
             video["last_error"] = error.code
@@ -126,6 +129,7 @@ def run(
         "delivery_uncertain": uncertain,
         "reason": reason,
         "errors": failures,
+        "processing_errors": processing_errors,
     }
     state.data["runs"].append({"at": started.isoformat(), **result})
     state.data["runs"] = state.data["runs"][-120:]
@@ -156,7 +160,8 @@ def send_briefing(state, telegram, started, result, namespace="briefing"):
     text = (
         f"📊 Kairos YouTube 브리핑\n\n이번 실행 발송 {result['sent']}건\n미처리 {result['pending']}건"
         f"\n도착 여부 확인 필요 {result['delivery_uncertain']}건\n조회 오류 {len(result['errors'])}건"
-        f"\n상태: {result['reason'] or '완료'}\n무료 한도 대기 영상은 다음 이용 가능 시점에 이월합니다."
+        f"\n분석·발송 오류 {len(result.get('processing_errors', []))}건"
+        f"\n상태: {result['reason'] or ('일부 처리 보류' if result.get('processing_errors') else '완료')}\n무료 한도 대기 영상은 다음 이용 가능 시점에 이월합니다."
     )
     try:
         briefing["message_id"] = telegram.send(text)

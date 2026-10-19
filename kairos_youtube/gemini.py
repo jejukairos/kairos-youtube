@@ -14,6 +14,8 @@ PROMPT = """공개 영상의 음성·화면을 처음부터 끝까지 확인하�
 전체 내용을 충분히 확인할 수 없으면 content_access='insufficient', coverage_complete=false로 응답하라.
 다음 JSON만 출력하라. bullets는 각각 {text, evidence:[{start_seconds, end_seconds, detail}]} 형식이다.
 evidence.detail에는 해당 구간에서 직접 확인한 구체적 근거를 짧게 쓴다. 최소 초반·중반·후반의 근거가 필요하다.
+시각은 영상 시작부터의 실제 초 단위 숫자이며 모든 근거는 0 <= start_seconds < end_seconds <= duration_seconds를
+반드시 지켜라. 영상 길이 밖의 시각이나 길이가 0초인 구간을 만들지 마라. 정확한 근거를 확인할 수 없으면 insufficient로 답하라.
 숫자·주장은 evidence와 일치해야 한다. content_access는 full_video 또는 insufficient이다.
 {\"video_id\":\"요청 영상 ID\",\"content_access\":\"full_video\",\"coverage_complete\":true,
 \"observed_duration_seconds\":123,\"bullets\":[{\"text\":\"...\",\"evidence\":[{\"start_seconds\":0,\"end_seconds\":30,\"detail\":\"...\"}]}]}
@@ -210,6 +212,14 @@ class Gemini:
             data = json.loads(raw)
         except ValueError:
             raise GeminiError("gemini_invalid_json") from None
-        summary = validate_summary(data, video, seconds)
+        try:
+            summary = validate_summary(data, video, seconds)
+        except (VideoError, GeminiError):
+            # Public-video AI output only, never credentials. Preserve rejected
+            # evidence for review; it must not be delivered or marked complete.
+            video["rejected_summary"] = data
+            self.guard.state.save()
+            raise
+        video.pop("rejected_summary", None)
         summary["usage"] = result.get("usageMetadata", {})
         return summary

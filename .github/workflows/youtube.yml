@@ -11,6 +11,10 @@ on:
       video_url:
         description: Public registered-channel video URL for one-video smoke test
         type: string
+      retry_pending:
+        description: Explicit retry of a reviewed smoke content failure only
+        type: boolean
+        default: false
 permissions:
   contents: write
   actions: read
@@ -54,10 +58,13 @@ jobs:
         env:
           MODE: ${{ github.event.inputs.mode || 'run' }}
           VIDEO_URL: ${{ github.event.inputs.video_url }}
+          RETRY_PENDING: ${{ github.event.inputs.retry_pending }}
         shell: bash
         run: |
           if [ "$MODE" = "smoke" ]; then
-            python -m kairos_youtube --git-state smoke --video-url "$VIDEO_URL" --metadata-file docs/smoke-video-metadata.json
+            extra=()
+            if [ "$RETRY_PENDING" = "true" ]; then extra+=(--retry-pending); fi
+            python -m kairos_youtube --git-state smoke --video-url "$VIDEO_URL" --metadata-file docs/smoke-video-metadata.json "${extra[@]}"
           elif [ "$MODE" = "discover" ]; then
             python -m kairos_youtube --git-state discover
           else

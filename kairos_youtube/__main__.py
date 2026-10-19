@@ -240,6 +240,11 @@ def main():
     smoke = sub.add_parser("smoke")
     smoke.add_argument("--video-url", required=True)
     smoke.add_argument(
+        "--retry-pending",
+        action="store_true",
+        help="Explicit retry after a reviewed non-auth/non-quota smoke failure; quota checks remain enforced",
+    )
+    smoke.add_argument(
         "--metadata-file",
         type=Path,
         help="Recent explicit public metadata snapshot for this single test only",
@@ -320,7 +325,7 @@ def execute(args):
         if not match:
             raise PolicyError("smoke_requires_canonical_public_video_url")
         vid = match.group(1)
-        if args.metadata_file:
+        if args.metadata_file and not yt.api_key:
             yt.verified_metadata = json.loads(
                 args.metadata_file.read_text(encoding="utf-8")
             )
@@ -346,6 +351,18 @@ def execute(args):
                     "retry_at": None,
                 },
             )
+            if args.retry_pending:
+                target = s.data["videos"][vid]
+                if target["status"] != "pending" or target.get("last_error") not in (
+                    "invalid_video_evidence",
+                    "invalid_summary_schema",
+                    "invalid_summary_length",
+                    "invalid_summary_bullet",
+                    "insufficient_video_coverage",
+                    "gemini_incomplete",
+                ):
+                    raise PolicyError("smoke_retry_requires_reviewed_content_failure")
+                target["retry_at"] = None
             s.save()
         except (KeyError, ValueError):
             raise PolicyError("smoke_video_metadata_invalid") from None
@@ -364,7 +381,17 @@ def execute(args):
         only_video_id=vid if args.command == "smoke" else None,
     )
     print(json.dumps(result, ensure_ascii=False))
-    return int(bool(result.get("reason") or result.get("errors")))
+    smoke_incomplete = (
+        args.command == "smoke" and s.data["videos"][vid]["status"] != "sent"
+    )
+    return int(
+        bool(
+            result.get("reason")
+            or result.get("errors")
+            or result.get("processing_errors")
+            or smoke_incomplete
+        )
+    )
 
 
 if __name__ == "__main__":

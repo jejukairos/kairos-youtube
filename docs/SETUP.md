@@ -32,7 +32,7 @@ Settings → Secrets and variables → Actions → New repository secret:
 | `TELEGRAM_BOT_TOKEN` | 사용자의 BotFather 봇 토큰 |
 | `TELEGRAM_CHAT_ID` | 수신자 자신의 개인 대화 숫자 ID |
 | `FREE_TIER_CONFIRMATION` | 아래에서 생성한 무료 프로젝트 확인 JSON |
-| `YOUTUBE_API_KEY` | 선택 사항. 피드 누락 복구용 별도 YouTube Data API 키 |
+| `YOUTUBE_API_KEY` | 별도 YouTube Data API 키. 현재 GitHub 러너의 영상 정보 조회 및 피드 누락 복구에 필요 |
 
 Telegram에서 해당 봇과 개인 대화를 시작하고 `/start`를 먼저 보냅니다. 수신자 번호를 직접 찾을 필요 없이, 에이전트가 안내한 `연결` 문장을 본인의 봇에 보내서 Chat ID를 안전하게 확인할 수 있습니다. 토큰이 포함된 API URL을 공유하거나 브라우저 기록·스크린샷에 남기지 마세요. 프로그램은 채널/그룹 이름이나 메시지 속 임의 Chat ID로 수신자를 바꾸지 않습니다.
 
@@ -82,11 +82,11 @@ Get-Content state/free-tier-confirmation.json -Raw | gh secret set FREE_TIER_CON
 
 정기 실행은 서버 측 API 키를 사용하며 Google 로그인 승인·SMS·CAPTCHA·Authenticator 입력을 요구하지 않습니다. 인증 오류는 중단하고 새 키 등록을 기다립니다. 로그인 쿠키·Google 브라우저 세션은 저장하지 않습니다.
 
-## 6. 선택 사항: YouTube Data API
+## 6. GitHub 운영에 필요한 YouTube Data API
 
-Gemini 키가 YouTube API에도 자동으로 허용된다고 가정하지 않습니다. 누락 복구가 필요하면 사용자가 별도 무료 프로젝트/키에서 **YouTube Data API v3**를 활성화하고 `YOUTUBE_API_KEY` Secret에 등록합니다. 결제수단은 등록하지 않습니다. Cloud Console의 실제 일일 quota도 확인합니다.
+Gemini 키가 YouTube API에도 자동으로 허용된다고 가정하지 않습니다. 2026-10-20 KST의 실제 GitHub 러너 시험에서 YouTube 공개 시청 페이지가 `LOGIN_REQUIRED`를 반환했습니다. 로그인·쿠키·CAPTCHA 처리를 추가하지 않으며, 공식 Data API로 영상 길이와 공개 상태를 확인합니다. 사용자가 결제 미연결 프로젝트에서 **YouTube Data API v3**를 활성화하고 Gemini 키와 별도의 API 키를 `YOUTUBE_API_KEY` Secret에 등록합니다. 키의 API 제한은 YouTube Data API v3만 허용하도록 설정합니다. 결제수단은 등록하지 않습니다. Cloud Console의 실제 일일 quota도 확인합니다.
 
-공식 `channels.list`, `playlistItems.list`는 각 요청의 quota 비용이 1입니다. 비싼 `search.list`는 사용하지 않습니다. 프로그램 자체 상한은 하루 1,000 단위이며 실제 허용량이 이보다 작으면 `policy.json`에서 낮춥니다. 미등록 상태에서도 공개 RSS 조회는 작동하지만 피드 15개 범위를 넘어선 누락 복구를 보장할 수 없습니다. [channels.list](https://developers.google.com/youtube/v3/docs/channels/list), [playlistItems.list](https://developers.google.com/youtube/v3/docs/playlistItems/list).
+공식 `videos.list`, `channels.list`, `playlistItems.list`는 각 요청의 quota 비용이 1입니다. 비싼 `search.list`는 사용하지 않습니다. 프로그램 자체 상한은 하루 1,000 단위이며 실제 허용량이 이보다 작으면 `policy.json`에서 낮춥니다. 미등록 상태에서도 공개 RSS 조회는 작동하지만 현재 GitHub 러너에서 영상 정보 조회 및 피드 15개 범위 밖 누락 복구가 불가능합니다. [videos.list](https://developers.google.com/youtube/v3/docs/videos/list), [channels.list](https://developers.google.com/youtube/v3/docs/channels/list), [playlistItems.list](https://developers.google.com/youtube/v3/docs/playlistItems/list).
 
 ## 7. 운영 중 중단·복구
 
