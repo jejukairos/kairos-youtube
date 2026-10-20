@@ -353,13 +353,17 @@ def execute(args):
             )
             if args.retry_pending:
                 target = s.data["videos"][vid]
-                if target["status"] != "pending" or target.get("last_error") not in (
-                    "invalid_video_evidence",
-                    "invalid_summary_schema",
-                    "invalid_summary_length",
-                    "invalid_summary_bullet",
-                    "insufficient_video_coverage",
-                    "gemini_incomplete",
+                if target["status"] != "pending" or not (
+                    target.get("last_error", "").startswith("state_checkpoint_failed")
+                    or target.get("last_error")
+                    in (
+                        "invalid_video_evidence",
+                        "invalid_summary_schema",
+                        "invalid_summary_length",
+                        "invalid_summary_bullet",
+                        "insufficient_video_coverage",
+                        "gemini_incomplete",
+                    )
                 ):
                     raise PolicyError("smoke_retry_requires_reviewed_content_failure")
                 target["retry_at"] = None

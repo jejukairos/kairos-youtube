@@ -252,6 +252,7 @@ class YouTube:
 
 def discover(state, youtube, channels, clock):
     failures = []
+    verified = []
     for channel in channels:
         now = clock()
         cid = channel.get("channel_id")
@@ -259,10 +260,17 @@ def discover(state, youtube, channels, clock):
             failures.append("channel_unverified")
             state.error("channel_unverified", now, channel_id=cid)
             continue
-        cursor = state.data["channels"].setdefault(
+        state.data["channels"].setdefault(
             cid, {"baseline": now.isoformat(), "last_success": None}
         )
-        state.save()  # Baseline survives even if first discovery fails.
+        verified.append(channel)
+    # Persist all baselines before any read. RSS reads have no paid quota or
+    # delivery side effect, so their results can be checkpointed as one batch.
+    # Data API quota reservations still save remotely before each API request.
+    state.save()
+    for channel in verified:
+        now, cid = clock(), channel["channel_id"]
+        cursor = state.data["channels"][cid]
         cutoff = timestamp(cursor["last_success"] or cursor["baseline"])
         try:
             try:
@@ -295,8 +303,8 @@ def discover(state, youtube, channels, clock):
                 state.error("feed_gap_youtube_key_required", now, channel_id=cid)
             else:
                 cursor["last_success"] = now.isoformat()
-            state.save()
         except KairosError as error:
             failures.append(error.code)
             state.error(error.code, now, channel_id=cid)
+    state.save()
     return failures

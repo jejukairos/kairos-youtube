@@ -35,12 +35,12 @@ class DurableStateTests(unittest.TestCase):
         original = Path.cwd()
         try:
             os.chdir(a)
-            ca = GitCheckpoint(a / "state.json")
+            ca = GitCheckpoint(a / "state.json", min_push_interval=0)
             s = State(a / "state.json", checkpoint=ca)
             s.data["videos"]["fixture"] = {"status": "sent"}
             s.save()
             os.chdir(b)
-            cb = GitCheckpoint(b / "state.json")
+            cb = GitCheckpoint(b / "state.json", min_push_interval=0)
             restored = State(b / "state.json", checkpoint=cb)
             self.assertEqual("sent", restored.data["videos"]["fixture"]["status"])
             os.chdir(a)

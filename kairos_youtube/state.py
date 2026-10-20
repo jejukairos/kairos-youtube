@@ -4,6 +4,7 @@ import copy
 import json
 import os
 import subprocess
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -13,7 +14,47 @@ from .errors import PolicyError
 def git(*args, data=None, check=True):
     proc = subprocess.run(["git", *args], input=data, capture_output=True)
     if check and proc.returncode:
-        raise PolicyError("state_checkpoint_failed")
+        detail = proc.stderr.lower()
+        category = "git_error"
+        for needles, label in (
+            ((b"429", b"rate limit", b"too many requests"), "rate_limited"),
+            ((b"stale info", b"non-fast-forward", b"fetch first"), "concurrent_writer"),
+            (
+                (b"could not resolve", b"connection", b"timed out", b"502", b"503"),
+                "network",
+            ),
+            (
+                (
+                    b"permission denied",
+                    b"403",
+                    b"authentication failed",
+                    b"protected branch",
+                ),
+                "permission",
+            ),
+        ):
+            if any(n in detail for n in needles):
+                category = label
+                break
+        operation = (
+            args[0]
+            if args
+            and args[0]
+            in {
+                "push",
+                "fetch",
+                "ls-remote",
+                "show",
+                "hash-object",
+                "mktree",
+                "commit-tree",
+                "count-objects",
+                "config",
+            }
+            else "git"
+        )
+        # Never log stderr: remote URLs can contain authentication credentials.
+        raise PolicyError(f"state_checkpoint_failed_{operation}_{category}")
     return proc.stdout.decode().strip(), proc.returncode
 
 
@@ -36,10 +77,11 @@ def exclusive_lock(path):
 class GitCheckpoint:
     branch = "refs/heads/kairos-youtube-state"
 
-    def __init__(self, path, max_storage_bytes=104857600):
+    def __init__(self, path, max_storage_bytes=104857600, *, min_push_interval=11):
         self.path = Path(path)
         self.max_storage_bytes = max_storage_bytes
         self.head = ""
+        self.min_push_interval, self.last_push = min_push_interval, None
         listing, _ = git("ls-remote", "--exit-code", "origin", self.branch, check=False)
         if listing:
             self.head = listing.split()[0]
@@ -66,6 +108,10 @@ class GitCheckpoint:
             int(stats.get("size", 0)) + int(stats.get("size-pack", 0))
         ) * 1024 >= self.max_storage_bytes:
             raise PolicyError("git_storage_limit_reached")
+        if self.last_push is not None:
+            remaining = self.min_push_interval - (time.monotonic() - self.last_push)
+            if remaining > 0:
+                time.sleep(remaining)
         git(
             "push",
             "--porcelain",
@@ -74,6 +120,7 @@ class GitCheckpoint:
             f"{commit}:{self.branch}",
         )
         self.head = commit
+        self.last_push = time.monotonic()
 
 
 class State:

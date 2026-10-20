@@ -282,6 +282,29 @@ class DiscoveryTests(Base):
         discover(self.s, yt, [self.channel()], self.clock)
         self.assertEqual(1, len(self.s.data["videos"]))
 
+    def test_32_rss_reads_preserve_baselines_without_32_remote_pushes(self):
+        channel_rows = [
+            {**self.channel(), "channel_id": "UC" + str(i).zfill(22)} for i in range(32)
+        ]
+        checkpoint = Mock()
+        self.s.checkpoint = checkpoint
+        yt = self.yt([])
+
+        def read(cid):
+            # A crash at any first read cannot erase the initial cutoff.
+            saved = json.loads(self.s.path.read_text(encoding="utf-8"))
+            self.assertEqual(32, len(saved["channels"]))
+            return []
+
+        yt.feed.side_effect = read
+        self.assertEqual([], discover(self.s, yt, channel_rows, self.clock))
+        self.assertEqual(32, yt.feed.call_count)
+        self.assertLessEqual(checkpoint.call_count, 2)
+        restored = State(self.s.path)
+        self.assertTrue(
+            all(v["last_success"] for v in restored.data["channels"].values())
+        )
+
     def test_failed_initial_discovery_preserves_baseline(self):
         yt = self.yt([])
         yt.feed.side_effect = DiscoveryError()
