@@ -83,5 +83,11 @@
     "workflow_run": 39374288301
   },
   "google_api_calls": 0,
-  "paid_api_calls": 0
+  "paid_api_calls": 0,
+  "telegram_replay": {
+    "status": "ALREADY_SENT",
+    "video_id": "L2GG_DeUDa0",
+    "workflow_run": 39374530380,
+    "remote_tests": 26
+  }
 }
