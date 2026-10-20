@@ -1,11 +1,11 @@
 {
-  "video_id": "TORQkD6cwUw",
-  "channel_id": "UC2GRwEADsEKEX5k-Xg9YphA",
-  "title": "중국 LCD 패널 가격 인상, 삼성·LG가 피하기 어려운 이유",
-  "duration_seconds": 231,
-  "verified_at": "2026-10-19T23:45:32.562382+00:00",
-  "source": "https://www.youtube.com/watch?v=TORQkD6cwUw",
+  "video_id": "QslXeEZ0tPI",
+  "channel_id": "UCaWi2foADm_lKAKnmeQwLSA",
+  "title": "코스피 IMF급 폭락, 7일 동안 -20%... 반등은 '이때' 입니다!",
+  "duration_seconds": 1010,
+  "verified_at": "2026-10-20T00:02:56.714853+00:00",
+  "source": "https://www.youtube.com/watch?v=QslXeEZ0tPI",
   "public": true,
   "playable": true,
-  "verification": "Official public watch-page player response fetched on development PC without authentication; metadata only, not video analysis."
+  "verification": "Official public watch-page player response fetched without authentication. Actual content analysis must still use the Gemini video input."
 }

@@ -486,6 +486,13 @@ class GeminiTests(Base):
         with self.assertRaises(VideoError):
             validate_summary(data, video(), 100)
 
+    def test_out_of_video_evidence_is_rejected_without_clipping(self):
+        data = summary()
+        data["bullets"][-1]["evidence"][0]["end_seconds"] = 345
+        with self.assertRaises(VideoError):
+            validate_summary(data, video(), 100)
+        self.assertEqual(345, data["bullets"][-1]["evidence"][0]["end_seconds"])
+
     def test_rest_video_and_count_payload_match_and_reserve_before_call(self):
         http = Mock()
         seen = []
