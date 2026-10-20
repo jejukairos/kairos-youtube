@@ -159,6 +159,7 @@ class YouTube:
                     "videoId": video_id,
                     "channelId": snapshot["channel_id"],
                     "title": snapshot["title"],
+                    "channelTitle": snapshot.get("channel_name", "YouTube"),
                     "lengthSeconds": snapshot["duration_seconds"],
                 }
             except (KeyError, TypeError, ValueError):
@@ -196,6 +197,7 @@ class YouTube:
                     "videoId": video_id,
                     "channelId": snippet["channelId"],
                     "title": snippet["title"],
+                    "channelTitle": snippet.get("channelTitle", "YouTube"),
                     "lengthSeconds": int(hours * 3600 + minutes * 60 + seconds),
                 }
                 if (

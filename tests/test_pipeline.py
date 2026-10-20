@@ -749,6 +749,80 @@ class DeliveryTests(Base):
 
 
 class RunnerTests(Base):
+    def test_manual_request_skips_channel_discovery_and_other_videos(self):
+        yt, gemini, tg = self.setup_clients()
+        target = self.s.data["videos"][VID]
+        target["channel_name"] = "요청한 외부 채널"
+        other = {**video(), "video_id": "zyxwvutsrqp", "priority": 9999}
+        self.s.data["videos"][other["video_id"]] = other
+        with patch("kairos_youtube.runner.discover") as discovery:
+            run(
+                self.s,
+                [],
+                yt,
+                gemini,
+                tg,
+                self.p,
+                self.c,
+                KEY,
+                self.clock,
+                only_video_id=VID,
+                max_videos=1,
+                skip_discovery=True,
+            )
+        discovery.assert_not_called()
+        gemini.summarize.assert_called_once()
+        self.assertEqual("pending", other["status"])
+        self.assertEqual({}, self.s.data["channels"])
+        self.assertIn("요청한 외부 채널", tg.send.call_args_list[0].args[0])
+        with self.assertRaises(PolicyError):
+            run(
+                self.s,
+                [],
+                yt,
+                gemini,
+                tg,
+                self.p,
+                self.c,
+                KEY,
+                self.clock,
+                skip_discovery=True,
+            )
+
+    def test_manual_request_retains_free_tier_and_quota_checks(self):
+        yt, gemini, tg = self.setup_clients()
+        missing = run(
+            self.s,
+            [],
+            yt,
+            gemini,
+            tg,
+            self.p,
+            self.c,
+            "",
+            self.clock,
+            only_video_id=VID,
+            skip_discovery=True,
+        )
+        self.assertEqual("gemini_key_missing", missing["reason"])
+        gemini.summarize.assert_not_called()
+        gemini.summarize.side_effect = QuotaError()
+        result = run(
+            self.s,
+            [],
+            yt,
+            gemini,
+            tg,
+            self.p,
+            self.c,
+            KEY,
+            self.clock,
+            only_video_id=VID,
+            skip_discovery=True,
+        )
+        self.assertEqual("free_quota_exhausted", result["reason"])
+        self.assertEqual("pending", self.s.data["videos"][VID]["status"])
+
     def test_cloud_monitor_without_youtube_key_keeps_queue_and_never_calls_ai(self):
         yt, gemini, tg = self.setup_clients()
         yt.api_key = ""

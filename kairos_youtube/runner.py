@@ -22,10 +22,13 @@ def run(
     max_videos=None,
     only_video_id=None,
     require_youtube_api=False,
+    skip_discovery=False,
 ):
     started, monotonic = clock(), time.monotonic()
     state.recover()
-    failures = discover(state, youtube, channels, clock)
+    if skip_discovery and only_video_id is None:
+        raise PolicyError("manual_request_requires_one_video")
+    failures = [] if skip_discovery else discover(state, youtube, channels, clock)
     reason = None
     if discovery_only:
         return {
@@ -103,7 +106,7 @@ def run(
                     for row in channels
                     if row["channel_id"] == video["channel_id"]
                 ),
-                "YouTube",
+                video.get("channel_name", "YouTube"),
             )
             video["parts"] = render(video, summary)
             video["status"] = "ready"

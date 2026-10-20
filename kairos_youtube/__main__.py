@@ -251,6 +251,11 @@ def main():
         type=Path,
         help="Recent explicit public metadata snapshot for this single test only",
     )
+    submit = sub.add_parser(
+        "submit", help="Summarize one explicitly requested public video"
+    )
+    submit.add_argument("--video-url", required=True)
+    submit.add_argument("--metadata-file", type=Path)
     reconcile = sub.add_parser("reconcile")
     reconcile.add_argument("--video-id", required=True)
     reconcile.add_argument(
@@ -320,7 +325,7 @@ def execute(args):
     yt = YouTube(http, guard, os.environ.get("YOUTUBE_API_KEY", ""))
     model = Gemini(http, guard, config, key)
     rows = channels()
-    if args.command == "smoke":
+    if args.command in ("smoke", "submit"):
         # All checks BEFORE inserting test work or contacting Google.
         verify_free_tier(config, confirmation, key, now())
         if telegram(http) is None:
@@ -338,13 +343,16 @@ def execute(args):
         try:
             details = yt.video_details(vid)
             cid = details["channelId"]
-            if cid not in {r["channel_id"] for r in rows}:
+            if args.command == "smoke" and cid not in {r["channel_id"] for r in rows}:
                 raise PolicyError("smoke_video_channel_not_registered")
+            channel_name = details.get("channelTitle", details.get("author", "YouTube"))
             s.data["videos"].setdefault(
                 vid,
                 {
                     "video_id": vid,
                     "channel_id": cid,
+                    "channel_name": channel_name,
+                    "source": "manual_request" if args.command == "submit" else "smoke",
                     "title": details["title"],
                     "url": args.video_url,
                     "published_at": now().isoformat(),
@@ -357,7 +365,7 @@ def execute(args):
                     "retry_at": None,
                 },
             )
-            if args.retry_pending:
+            if args.command == "smoke" and args.retry_pending:
                 target = s.data["videos"][vid]
                 if target["status"] != "pending" or not (
                     target.get("last_error", "").startswith("state_checkpoint_failed")
@@ -387,8 +395,9 @@ def execute(args):
         key,
         now,
         discovery_only=args.command == "discover",
-        max_videos=1 if args.command == "smoke" else None,
-        only_video_id=vid if args.command == "smoke" else None,
+        max_videos=1 if args.command in ("smoke", "submit") else None,
+        only_video_id=vid if args.command in ("smoke", "submit") else None,
+        skip_discovery=args.command == "submit",
         require_youtube_api=args.command == "run"
         and os.environ.get("GITHUB_ACTIONS") == "true",
     )
@@ -402,7 +411,8 @@ def execute(args):
     ):
         return 0
     smoke_incomplete = (
-        args.command == "smoke" and s.data["videos"][vid]["status"] != "sent"
+        args.command in ("smoke", "submit")
+        and s.data["videos"][vid]["status"] != "sent"
     )
     return int(
         bool(
