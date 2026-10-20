@@ -91,7 +91,28 @@ class Telegram:
         if response.status >= 500:
             raise UncertainDelivery()
         if response.status != 200:
-            raise TelegramError()
+            # Fixed categories only: never expose raw provider descriptions,
+            # request URLs, tokens or chat identifiers in failure logs.
+            reason = "request_rejected"
+            try:
+                description = response.json().get("description", "").lower()
+                for needle, label in (
+                    ("message is too long", "message_too_long"),
+                    ("message text is empty", "empty_text"),
+                    ("chat not found", "chat_not_found"),
+                    ("bot was blocked", "bot_blocked"),
+                    ("too many requests", "rate_limited"),
+                    ("unauthorized", "token_invalid"),
+                    ("can't parse entities", "invalid_entities"),
+                    ("url", "url_rejected"),
+                    ("preview", "preview_rejected"),
+                ):
+                    if needle in description:
+                        reason = label
+                        break
+            except (ValueError, AttributeError, TypeError):
+                pass
+            raise TelegramError(f"telegram_http_{response.status}_{reason}")
         try:
             data = response.json()
             if data.get("ok") is not True:
