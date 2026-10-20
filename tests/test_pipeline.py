@@ -16,7 +16,12 @@ from kairos_youtube.errors import (
     UncertainDelivery,
     VideoError,
 )
-from kairos_youtube.gemini import Gemini, validate_summary
+from kairos_youtube.gemini import (
+    Gemini,
+    canonical_evidence_times,
+    validate_summary,
+    video_timestamp_seconds,
+)
 from kairos_youtube.guard import Guard, fingerprint, timestamp, verify_free_tier
 from kairos_youtube.http import Http, Response
 from kairos_youtube.runner import briefing_slot, run, send_briefing
@@ -438,6 +443,27 @@ class DiscoveryTests(Base):
 
 
 class GeminiTests(Base):
+    def test_explicit_video_time_is_converted_without_guessing_mmss_numbers(self):
+        self.assertEqual(225, video_timestamp_seconds("03:45"))
+        self.assertEqual(1010, video_timestamp_seconds("16:50"))
+        self.assertEqual(4530, video_timestamp_seconds("01:15:30"))
+        for invalid in (345, "345", "03:99", "01:60:00", "-1:00"):
+            with self.subTest(invalid=invalid), self.assertRaises(VideoError):
+                video_timestamp_seconds(invalid)
+
+    def test_explicit_timestamp_conversion_keeps_the_actual_coverage_checks(self):
+        data = summary()
+        for b in data["bullets"]:
+            e = b["evidence"][0]
+            for name in ("start", "end"):
+                n = e.pop(name + "_seconds")
+                e[name + "_time"] = f"{n // 60:02d}:{n % 60:02d}"
+        canonical_evidence_times(data)
+        validate_summary(data, video(), 100)
+        data["bullets"][-1]["evidence"][0].update({"end_time": "03:45"})
+        with self.assertRaises(VideoError):
+            canonical_evidence_times(data)
+
     def test_one_rpm_account_reuses_count_on_next_available_run(self):
         self.c["rpm"] = 1
         v = video()

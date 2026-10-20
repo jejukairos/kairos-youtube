@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from datetime import timedelta
 
 from .errors import AuthError, GeminiError, QuotaError, VideoError
@@ -12,13 +13,14 @@ PROMPT = """공개 영상의 음성·화면을 처음부터 끝까지 확인하�
 구분하고 전망의 전제조건과 영상에 언급된 반대 가능성·위험을 포함하라. 없는 수치·반론·정보는 추가하지 마라.
 별점·추천 등급·장식은 쓰지 마라. 타 채널 요약 문장을 복사하지 마라.
 전체 내용을 충분히 확인할 수 없으면 content_access='insufficient', coverage_complete=false로 응답하라.
-다음 JSON만 출력하라. bullets는 각각 {text, evidence:[{start_seconds, end_seconds, detail}]} 형식이다.
+다음 JSON만 출력하라. bullets는 각각 {text, evidence:[{start_time, end_time, detail}]} 형식이다.
 evidence.detail에는 해당 구간에서 직접 확인한 구체적 근거를 짧게 쓴다. 최소 초반·중반·후반의 근거가 필요하다.
-시각은 영상 시작부터의 실제 초 단위 숫자이며 모든 근거는 0 <= start_seconds < end_seconds <= duration_seconds를
-반드시 지켜라. 영상 길이 밖의 시각이나 길이가 0초인 구간을 만들지 마라. 정확한 근거를 확인할 수 없으면 insufficient로 답하라.
+시각은 영상 시작부터의 실제 MM:SS 문자열로 써라. 1시간 이상이면 HH:MM:SS로 쓴다.
+예: 3분 45초는 "03:45"이다. 이를 345초로 쓰거나 직접 초로 환산하지 마라. 초 환산은 프로그램이 한다.
+모든 구간은 실제 영상 안에 있고 시작보다 끝이 늦어야 한다. 정확한 근거를 확인할 수 없으면 insufficient로 답하라.
 숫자·주장은 evidence와 일치해야 한다. content_access는 full_video 또는 insufficient이다.
 {\"video_id\":\"요청 영상 ID\",\"content_access\":\"full_video\",\"coverage_complete\":true,
-\"observed_duration_seconds\":123,\"bullets\":[{\"text\":\"...\",\"evidence\":[{\"start_seconds\":0,\"end_seconds\":30,\"detail\":\"...\"}]}]}
+\"observed_duration_seconds\":123,\"bullets\":[{\"text\":\"...\",\"evidence\":[{\"start_time\":\"00:00\",\"end_time\":\"00:30\",\"detail\":\"...\"}]}]}
 """
 
 
@@ -31,11 +33,17 @@ def summary_schema(video_id, seconds):
     evidence = {
         "type": "OBJECT",
         "properties": {
-            "start_seconds": {"type": "NUMBER", "minimum": 0, "maximum": seconds},
-            "end_seconds": {"type": "NUMBER", "minimum": 0, "maximum": seconds},
+            "start_time": {
+                "type": "STRING",
+                "description": "Actual video timestamp MM:SS or HH:MM:SS, e.g. 03:45. Never decimal minutes or concatenated digits.",
+            },
+            "end_time": {
+                "type": "STRING",
+                "description": "Actual end timestamp MM:SS or HH:MM:SS; later than start_time and within the video.",
+            },
             "detail": {"type": "STRING"},
         },
-        "required": ["start_seconds", "end_seconds", "detail"],
+        "required": ["start_time", "end_time", "detail"],
     }
     return {
         "type": "OBJECT",
@@ -68,6 +76,34 @@ def summary_schema(video_id, seconds):
             "bullets",
         ],
     }
+
+
+def video_timestamp_seconds(value):
+    """Parse explicit video timestamps, never guess units of numeric values."""
+    if not isinstance(value, str) or not re.fullmatch(
+        r"\d{1,3}:\d{2}(?::\d{2})?", value
+    ):
+        raise VideoError("invalid_video_timestamp")
+    parts = [int(p) for p in value.split(":")]
+    if parts[-1] >= 60 or (len(parts) == 3 and parts[-2] >= 60):
+        raise VideoError("invalid_video_timestamp")
+    return sum(n * 60**i for i, n in enumerate(reversed(parts)))
+
+
+def canonical_evidence_times(data):
+    """Convert only explicitly labelled time strings; do not clip or rescale."""
+    try:
+        for bullet in data["bullets"]:
+            for evidence in bullet["evidence"]:
+                if "start_time" in evidence or "end_time" in evidence:
+                    for name in ("start", "end"):
+                        seconds = video_timestamp_seconds(evidence[name + "_time"])
+                        key = name + "_seconds"
+                        if key in evidence and evidence[key] != seconds:
+                            raise VideoError("ambiguous_video_timestamp")
+                        evidence[key] = seconds
+    except (KeyError, TypeError):
+        raise GeminiError("invalid_summary_schema") from None
 
 
 def validate_summary(data, video, seconds):
@@ -264,6 +300,7 @@ class Gemini:
         except ValueError:
             raise GeminiError("gemini_invalid_json") from None
         try:
+            canonical_evidence_times(data)
             summary = validate_summary(data, video, seconds)
         except (VideoError, GeminiError):
             # Public-video AI output only, never credentials. Preserve rejected
