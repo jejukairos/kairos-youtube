@@ -1,7 +1,8 @@
 name: Kairos schedule watchdog
 on:
   schedule:
-    - cron: '0 4,8,13,16 * * *'
+    - cron: '30 4 * * *'
+    - cron: '0 8,13,16 * * *'
   workflow_run:
     workflows: ['Kairos YouTube four times daily']
     types: [completed]

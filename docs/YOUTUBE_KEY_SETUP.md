@@ -10,7 +10,7 @@ Gemini 키와 별도로 공개 영상의 길이·채널·공개 상태를 확인
 
 [할당량 화면](https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas)에서 실제 일일 할당량도 확인합니다. 프로그램은 하루 최대 1,000단위로 제한하며, 프로젝트의 실제 한도가 더 낮으면 그 이하로 조정합니다. 다른 앱에서 소비한 할당량은 이 프로그램의 장부에 포함되지 않으므로 Google의 할당량 오류가 나오면 보류합니다. 자동으로 추가 할당량을 신청하거나 결제를 연결하지 않습니다.
 
-에이전트는 Secret의 값을 출력하지 않고 공개 영상 조회와 실제 요약·발송을 검증한 뒤 정기 운영 준비 상태를 보고합니다. 요청된 일정은 한국 시간 매일 11시·15시·20시·23시입니다. 키 등록만으로 실제 정기 요약·발송 완료라고 판단하지 않습니다.
+에이전트는 Secret의 값을 출력하지 않고 공개 영상 조회와 실제 요약·발송을 검증한 뒤 정기 운영 준비 상태를 보고합니다. 요청된 일정은 한국 시간 매일 11시 30분·15시·20시·23시입니다. 키 등록만으로 실제 정기 요약·발송 완료라고 판단하지 않습니다.
 
 공식 안내: [YouTube API 시작하기](https://developers.google.com/youtube/v3/getting-started), [API 키 생성·제한](https://docs.cloud.google.com/docs/authentication/api-keys#create_an_api_key), [영상 정보 조회](https://developers.google.com/youtube/v3/docs/videos/list).
 

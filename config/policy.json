@@ -13,7 +13,8 @@
   "max_git_storage_bytes": 104857600,
   "max_run_seconds": 1200,
   "max_videos_per_run": 10,
-  "bootstrap_lookback_hours": 0,
+  "collection_initial_start": "2026-10-19T02:30:00+00:00",
+  "collection_first_run": "2026-10-20T02:30:00+00:00",
   "youtube_units_per_day": 1000,
   "priority_aging_days": 3
 }

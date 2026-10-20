@@ -1,5 +1,5 @@
 import time
-from datetime import timedelta, timezone
+from datetime import timedelta
 
 from .errors import (
     AuthError,
@@ -10,6 +10,7 @@ from .errors import (
     TelegramRateLimit,
 )
 from .guard import fingerprint, timestamp, verify_free_tier
+from .schedule import boundary, initialize_window
 from .telegram import deliver, render
 from .youtube import discover
 
@@ -35,13 +36,30 @@ def run(
     state.recover()
     if skip_discovery and only_video_id is None:
         raise PolicyError("manual_request_requires_one_video")
-    failures = [] if skip_discovery else discover(state, youtube, channels, clock)
+    first_run, window_end = None, None
+    if skip_discovery or only_video_id is not None:
+        failures = []
+    else:
+        first_run = initialize_window(state, channels, policy)
+        window_end = boundary(started)
+        if first_run is not None and started < first_run:
+            # Before the requested first briefing, configure the baseline only.
+            # No YouTube, Gemini or Telegram calls and no cursor advancement.
+            return {
+                "mode": "discovery_only" if discovery_only else "waiting_first_run",
+                "discovered": len(state.data["videos"]),
+                "errors": [],
+                "first_run": first_run.isoformat(),
+                "collection_initial_start": state.data["collection"]["initial_start"],
+            }
+        failures = discover(state, youtube, channels, clock, window_end=window_end)
     reason = None
     if discovery_only:
         return {
             "discovered": len(state.data["videos"]),
             "errors": failures,
             "mode": "discovery_only",
+            "collection_window_end": window_end.isoformat() if window_end else None,
         }
     try:
         verify_free_tier(policy, confirmation, key, clock())
@@ -168,16 +186,9 @@ def run(
 
 
 def briefing_slot(started, namespace="briefing"):
-    """One persistent delivery slot per 11:00/15:00/20:00/23:00 KST run."""
-    utc = started.astimezone(timezone.utc)
-    hours = (2, 6, 11, 14)
-    prior = [hour for hour in hours if hour <= utc.hour]
-    if prior:
-        hour = prior[-1]
-    else:
-        utc -= timedelta(days=1)
-        hour = hours[-1]
-    return f"{namespace}:{utc.date().isoformat()}-{hour:02d}"
+    """Preserve existing slot keys; the morning boundary is now 11:30 KST."""
+    slot = boundary(started)
+    return f"{namespace}:{slot.date().isoformat()}-{slot.hour:02d}"
 
 
 def send_briefing(state, telegram, started, result, namespace="briefing"):

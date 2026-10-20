@@ -109,6 +109,10 @@ class Base(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.s = State(Path(self.temp.name) / "state.json")
         self.p, self.c = policy(), confirmation()
+        # Generic pipeline fixtures predate the owner's dated activation.
+        # Publication-window activation is exercised separately below.
+        self.p.pop("collection_initial_start", None)
+        self.p.pop("collection_first_run", None)
         self.clock = Mock(return_value=NOW)
         self.g = Guard(self.s, self.p, self.c, self.clock)
 
@@ -960,18 +964,18 @@ class RunnerTests(Base):
             "reason": None,
         }
         for hour in (2, 6, 11, 14):
-            started = NOW.replace(hour=hour, minute=0)
+            started = NOW.replace(hour=hour, minute=30 if hour == 2 else 0)
             send_briefing(self.s, tg, started, result)
             send_briefing(self.s, tg, started + timedelta(minutes=20), result)
         self.assertEqual(4, tg.send.call_count)
         self.assertEqual(4, len(self.s.data["briefings"]))
 
     def test_briefing_slots_roll_to_previous_run_before_first_slot(self):
-        before_first = NOW.replace(hour=1, minute=59)
+        before_first = NOW.replace(hour=2, minute=29)
         prior_evening = (NOW - timedelta(days=1)).replace(hour=14, minute=0)
         self.assertEqual(briefing_slot(prior_evening), briefing_slot(before_first))
         self.assertNotEqual(
-            briefing_slot(before_first), briefing_slot(NOW.replace(hour=2, minute=0))
+            briefing_slot(before_first), briefing_slot(NOW.replace(hour=2, minute=30))
         )
         kst = timezone(timedelta(hours=9))
         self.assertEqual(briefing_slot(NOW), briefing_slot(NOW.astimezone(kst)))

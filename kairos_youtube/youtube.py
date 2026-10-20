@@ -252,7 +252,7 @@ class YouTube:
         return int(details["lengthSeconds"])
 
 
-def discover(state, youtube, channels, clock):
+def discover(state, youtube, channels, clock, *, window_end=None):
     failures = []
     verified = []
     for channel in channels:
@@ -285,8 +285,12 @@ def discover(state, youtube, channels, clock):
             if gap and youtube.api_key:
                 videos, gap = youtube.uploads(cid, cutoff), False
             for video in videos:
-                # Always use channel baseline to prevent bootstrap history blasts.
-                if timestamp(video["published_at"]) < timestamp(cursor["baseline"]):
+                published = timestamp(video["published_at"])
+                # Half-open intervals: a video exactly at the end belongs to
+                # the next window. Future publications never leak into a run.
+                if published < timestamp(cursor["baseline"]) or (
+                    window_end is not None and published >= window_end
+                ):
                     continue
                 if video["video_id"] not in state.data["videos"]:
                     state.data["videos"][video["video_id"]] = {
@@ -298,13 +302,18 @@ def discover(state, youtube, channels, clock):
                         "retry_at": None,
                         "parts": [],
                         "sent_parts": [],
+                        "collection_window_start": cutoff.isoformat(),
+                        "collection_window_end": (window_end or now).isoformat(),
+                        # Re-read visible RSS entries to catch late indexing;
+                        # video_id dedup prevents reanalysis or repeat delivery.
+                        "late_discovery": published < cutoff,
                     }
             if gap:
                 # Keep original cursor so a later API-enabled run can recover the gap.
                 failures.append("feed_gap_youtube_key_required")
                 state.error("feed_gap_youtube_key_required", now, channel_id=cid)
             else:
-                cursor["last_success"] = now.isoformat()
+                cursor["last_success"] = (window_end or now).isoformat()
         except KairosError as error:
             failures.append(error.code)
             state.error(error.code, now, channel_id=cid)

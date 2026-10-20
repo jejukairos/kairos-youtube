@@ -187,7 +187,7 @@ def watchdog(args, s, http):
         and r.get("event") in ("schedule", "workflow_dispatch")
     ]
     stale = not recent or now() - timestamp(recent[0]["created_at"]) > timedelta(
-        hours=14  # Longest scheduled gap is 12h, plus 2h delay allowance.
+        hours=14.5  # Longest scheduled gap is 12.5h, plus 2h delay allowance.
     )
     failed = bool(
         runs and runs[0].get("conclusion") in ("failure", "timed_out", "cancelled")
