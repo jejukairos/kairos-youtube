@@ -478,6 +478,12 @@ class DiscoveryTests(Base):
 
 
 class GeminiTests(Base):
+    def test_transient_server_failure_is_identified_without_echoing_provider_body(self):
+        with self.assertRaises(GeminiError) as caught:
+            Gemini.check_response(response({"error": "fixture-secret-do-not-log"}, 503))
+        self.assertEqual("gemini_http_503_temporary", caught.exception.code)
+        self.assertNotIn("fixture-secret", str(caught.exception))
+
     def test_visual_sampling_recounts_same_whole_video_without_audio_clipping(self):
         http = Mock()
         generated = response(

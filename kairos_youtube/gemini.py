@@ -186,6 +186,9 @@ class Gemini:
             raise QuotaError()
         if response.status in (400, 404):
             raise VideoError("video_or_model_input_rejected")
+        if response.status in (500, 502, 503, 504):
+            # Fixed status only: provider bodies can contain request details.
+            raise GeminiError(f"gemini_http_{response.status}_temporary")
         if response.status != 200:
             raise GeminiError()
 
