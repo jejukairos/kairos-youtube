@@ -41,3 +41,11 @@ class TelegramError(KairosError):
 
 class UncertainDelivery(TelegramError):
     code = "telegram_delivery_uncertain"
+
+
+class TelegramRateLimit(TelegramError):
+    code = "telegram_rate_limited"
+
+    def __init__(self, retry_after):
+        self.retry_after = retry_after
+        super().__init__()

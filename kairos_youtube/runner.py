@@ -1,7 +1,14 @@
 import time
 from datetime import timedelta, timezone
 
-from .errors import AuthError, KairosError, PolicyError, QuotaError, TelegramError
+from .errors import (
+    AuthError,
+    KairosError,
+    PolicyError,
+    QuotaError,
+    TelegramError,
+    TelegramRateLimit,
+)
 from .guard import fingerprint, timestamp, verify_free_tier
 from .telegram import deliver, render
 from .youtube import discover
@@ -75,21 +82,26 @@ def run(
             break
         if video["status"] in ("sent", "delivery_uncertain"):
             continue
-        if reason:
+        if reason and not (
+            reason == "youtube_api_key_missing_processing_held"
+            and video["status"] == "ready"
+            and telegram is not None
+        ):
+            continue
+        if video.get("retry_at") and timestamp(video["retry_at"]) > clock():
             continue
         if video["status"] == "ready" and telegram is not None:
             try:
                 deliver(state, video, telegram)
                 sent += 1
             except TelegramError as error:
+                video["last_error"] = error.code
                 state.error(error.code, clock(), video["video_id"])
                 processing_errors.append(error.code)
             continue
         if reason or count >= (
             max_videos if max_videos is not None else policy["max_videos_per_run"]
         ):
-            continue
-        if video.get("retry_at") and timestamp(video["retry_at"]) > clock():
             continue
         try:
             seconds = youtube.metadata(video)
@@ -120,9 +132,10 @@ def run(
             if video["status"] == "analyzing":
                 video["status"] = "pending"
             video["last_error"] = error.code
-            video["retry_at"] = (
-                clock() + timedelta(hours=min(48, 2 ** min(video["attempts"], 5)))
-            ).isoformat()
+            if not isinstance(error, TelegramRateLimit):
+                video["retry_at"] = (
+                    clock() + timedelta(hours=min(48, 2 ** min(video["attempts"], 5)))
+                ).isoformat()
             if isinstance(error, AuthError):
                 state.data["pause"] = {
                     "fingerprint": fingerprint(key),

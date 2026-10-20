@@ -1,6 +1,7 @@
 import re
+from datetime import datetime, timedelta, timezone
 
-from .errors import KairosError, TelegramError, UncertainDelivery
+from .errors import KairosError, TelegramError, TelegramRateLimit, UncertainDelivery
 
 
 def units(text):
@@ -90,6 +91,15 @@ class Telegram:
             raise UncertainDelivery() from None
         if response.status >= 500:
             raise UncertainDelivery()
+        if response.status == 429:
+            retry_after = 3600
+            try:
+                value = response.json().get("parameters", {}).get("retry_after")
+                if type(value) is int and value > 0:
+                    retry_after = value
+            except (KairosError, AttributeError, TypeError):
+                pass
+            raise TelegramRateLimit(retry_after)
         if response.status != 200:
             # Fixed categories only: never expose raw provider descriptions,
             # request URLs, tokens or chat identifiers in failure logs.
@@ -110,7 +120,7 @@ class Telegram:
                     if needle in description:
                         reason = label
                         break
-            except (ValueError, AttributeError, TypeError):
+            except (ValueError, AttributeError, TypeError, KairosError):
                 pass
             raise TelegramError(f"telegram_http_{response.status}_{reason}")
         try:
@@ -146,6 +156,13 @@ def deliver(state, video, telegram):
             video["status"] = "delivery_uncertain"
             state.save()
             raise
+        except TelegramRateLimit as error:
+            video["status"] = "ready"
+            video["retry_at"] = (
+                datetime.now(timezone.utc) + timedelta(seconds=error.retry_after + 1)
+            ).isoformat()
+            state.save()
+            raise
         except TelegramError:
             video["status"] = "ready"
             state.save()
@@ -154,6 +171,8 @@ def deliver(state, video, telegram):
         video["status"] = "ready"
         state.save()
     video["status"] = "sent"
+    video["retry_at"] = None
+    video.pop("last_error", None)
     state.save()
 
 

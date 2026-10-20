@@ -13,6 +13,7 @@ from kairos_youtube.errors import (
     PolicyError,
     QuotaError,
     TelegramError,
+    TelegramRateLimit,
     UncertainDelivery,
     VideoError,
 )
@@ -636,6 +637,22 @@ class GeminiTests(Base):
 
 
 class DeliveryTests(Base):
+    def test_rate_limit_wait_is_saved_and_no_partial_message_is_marked_sent(self):
+        http = Mock()
+        http.request.return_value = response(
+            {"parameters": {"retry_after": 90}, "description": "Too Many Requests"},
+            429,
+        )
+        v = {**video(), "status": "ready", "parts": ["fixture"]}
+        self.s.data["videos"][VID] = v
+        with self.assertRaises(TelegramRateLimit) as caught:
+            deliver(self.s, v, Telegram(http, "fixture-token", "123"))
+        self.assertEqual(90, caught.exception.retry_after)
+        saved = State(self.s.path).data["videos"][VID]
+        self.assertEqual("ready", saved["status"])
+        self.assertEqual([], saved["sent_parts"])
+        self.assertGreater(timestamp(saved["retry_at"]), datetime.now(timezone.utc))
+
     def test_style_and_emoji_length(self):
         data = summary()
         for b in data["bullets"]:
@@ -666,6 +683,21 @@ class DeliveryTests(Base):
         self.assertEqual("123", payload["chat_id"])
         self.assertNotIn("parse_mode", payload)
         self.assertEqual({"is_disabled": True}, payload["link_preview_options"])
+
+    def test_provider_rejection_is_classified_without_echoing_secret_or_raw_body(self):
+        http = Mock()
+        http.request.return_value = response(
+            {"description": "Unauthorized fixture-secret-do-not-log"}, 401
+        )
+        tg = Telegram(http, "fixture-token", "123")
+        with self.assertRaises(TelegramError) as caught:
+            tg.send("fixture")
+        self.assertEqual("telegram_http_401_token_invalid", caught.exception.code)
+        self.assertNotIn("fixture-secret", str(caught.exception))
+        http.request.return_value = Response(400, b"not-json-secret", {})
+        with self.assertRaises(TelegramError) as caught:
+            tg.send("fixture")
+        self.assertEqual("telegram_http_400_request_rejected", caught.exception.code)
 
     def test_youtube_card_requests_large_preview_above_channel_and_title(self):
         http = Mock()
@@ -786,6 +818,42 @@ class DeliveryTests(Base):
 
 
 class RunnerTests(Base):
+    def test_missing_youtube_key_allows_saved_delivery_but_no_ai(self):
+        yt, gemini, tg = self.setup_clients()
+        yt.api_key = ""
+        target = self.s.data["videos"][VID]
+        target.update(status="ready", parts=["previously generated summary"])
+        result = run(
+            self.s,
+            [],
+            yt,
+            gemini,
+            tg,
+            self.p,
+            self.c,
+            KEY,
+            self.clock,
+            require_youtube_api=True,
+        )
+        self.assertTrue(result["processing_held"])
+        self.assertEqual(1, result["sent"])
+        self.assertEqual("sent", target["status"])
+        gemini.check_model.assert_not_called()
+        gemini.summarize.assert_not_called()
+
+    def test_ready_summary_waits_until_telegram_retry_time_without_ai(self):
+        yt, gemini, tg = self.setup_clients()
+        v = self.s.data["videos"][VID]
+        v.update(
+            status="ready",
+            parts=["saved summary"],
+            retry_at=(NOW + timedelta(minutes=2)).isoformat(),
+        )
+        self.execute(yt, gemini, tg)
+        gemini.summarize.assert_not_called()
+        self.assertEqual("ready", v["status"])
+        self.assertEqual(1, tg.send.call_count)  # Status briefing only.
+
     def test_manual_request_skips_channel_discovery_and_other_videos(self):
         yt, gemini, tg = self.setup_clients()
         target = self.s.data["videos"][VID]
