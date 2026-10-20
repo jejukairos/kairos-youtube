@@ -217,6 +217,13 @@ class Gemini:
                 }
             ],
         }
+        fps = video.get("video_fps", 1.0)
+        if fps not in (0.5, 1.0):
+            raise VideoError("video_sampling_requires_review")
+        if fps != 1.0:
+            # Whole video, including audio; no start/end clipping. Supported
+            # official REST video metadata changes visual sampling only.
+            content["contents"][0]["parts"][1]["videoMetadata"] = {"fps": fps}
         generation_config = {
             "maxOutputTokens": self.policy["max_output_tokens"],
             "responseMimeType": "application/json",

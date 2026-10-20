@@ -6,6 +6,11 @@ on:
         description: Canonical public video URL explicitly requested by the owner
         type: string
         required: true
+      video_fps:
+        description: Visual sampling only; 0.5 reads a frame every 2s, full audio retained
+        type: choice
+        options: ['1.0', '0.5']
+        default: '1.0'
 permissions:
   contents: write
 concurrency:
@@ -33,4 +38,5 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           FREE_TIER_CONFIRMATION: ${{ secrets.FREE_TIER_CONFIRMATION }}
           VIDEO_URL: ${{ inputs.video_url }}
-        run: python -m kairos_youtube --git-state submit --video-url "$VIDEO_URL" --metadata-file docs/manual-video-metadata.json
+          VIDEO_FPS: ${{ inputs.video_fps }}
+        run: python -m kairos_youtube --git-state submit --video-url "$VIDEO_URL" --video-fps "$VIDEO_FPS" --metadata-file docs/manual-video-metadata.json

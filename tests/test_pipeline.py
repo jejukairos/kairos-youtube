@@ -466,6 +466,43 @@ class DiscoveryTests(Base):
 
 
 class GeminiTests(Base):
+    def test_visual_sampling_recounts_same_whole_video_without_audio_clipping(self):
+        http = Mock()
+        generated = response(
+            {
+                "candidates": [
+                    {
+                        "finishReason": "STOP",
+                        "content": {"parts": [{"text": json.dumps(summary())}]},
+                    }
+                ]
+            }
+        )
+        http.request.side_effect = [
+            response({"totalTokens": 1000}),
+            generated,
+            response({"totalTokens": 800}),
+            generated,
+        ]
+        v = video()
+        client = Gemini(http, self.g, self.p, KEY)
+        client.summarize(v, 100)
+        v["video_fps"] = 0.5
+        client.summarize(v, 100)
+        calls = http.request.call_args_list
+        self.assertTrue(calls[2].args[1].endswith(":countTokens"))
+        counted = calls[2].kwargs["payload"]["generateContentRequest"]["contents"]
+        content = calls[3].kwargs["payload"]["contents"]
+        self.assertEqual(counted, content)
+        media = content[0]["parts"][1]
+        self.assertEqual({"fps": 0.5}, media["videoMetadata"])
+        self.assertEqual(v["url"], media["fileData"]["fileUri"])
+        self.assertEqual(400, sum(r["seconds"] for r in self.s.data["reservations"]))
+        v["video_fps"] = 0.01
+        with self.assertRaises(VideoError):
+            client.summarize(v, 100)
+        self.assertEqual(4, http.request.call_count)
+
     def test_explicit_video_time_is_converted_without_guessing_mmss_numbers(self):
         self.assertEqual(225, video_timestamp_seconds("03:45"))
         self.assertEqual(1010, video_timestamp_seconds("16:50"))

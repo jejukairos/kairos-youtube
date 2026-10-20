@@ -256,6 +256,7 @@ def main():
     )
     submit.add_argument("--video-url", required=True)
     submit.add_argument("--metadata-file", type=Path)
+    submit.add_argument("--video-fps", type=float, choices=(0.5, 1.0), default=1.0)
     reconcile = sub.add_parser("reconcile")
     reconcile.add_argument("--video-id", required=True)
     reconcile.add_argument(
@@ -365,6 +366,24 @@ def execute(args):
                     "retry_at": None,
                 },
             )
+            if args.command == "submit":
+                target = s.data["videos"][vid]
+                if target["status"] == "pending":
+                    changed_sampling = target.get("video_fps", 1.0) != args.video_fps
+                    previous_too_large = (
+                        target.get("token_count", {}).get("tokens", 0)
+                        + config["max_output_tokens"]
+                        > confirmation["tpm"]
+                    )
+                    if (
+                        changed_sampling
+                        and previous_too_large
+                        and target.get("last_error") == "free_quota_exhausted"
+                    ):
+                        # The input changed after a reviewed single-request TPM
+                        # failure. Keep every reservation; all caps run again.
+                        target["retry_at"] = None
+                    target["video_fps"] = args.video_fps
             if args.command == "smoke" and args.retry_pending:
                 target = s.data["videos"][vid]
                 if target["status"] != "pending" or not (
