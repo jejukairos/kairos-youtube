@@ -241,6 +241,7 @@ def main():
     )
     delivery.add_argument("--video-id", required=True)
     delivery.add_argument("--review-legacy-wait", action="store_true")
+    delivery.add_argument("--plain-link", action="store_true")
     p = sub.add_parser("probe")
     p.add_argument("--sample-duration", action="store_true")
     p.add_argument("--inspect-feed", action="store_true")
@@ -315,6 +316,7 @@ def execute(args):
             telegram(http),
             now,
             review_legacy_wait=args.review_legacy_wait,
+            plain_link=args.plain_link,
         )
         print(json.dumps(result, ensure_ascii=False))
         return 0 if result["delivery"] == "sent" else 3

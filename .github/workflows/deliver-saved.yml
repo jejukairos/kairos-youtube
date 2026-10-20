@@ -14,6 +14,10 @@ on:
         description: Read bot identity and fixed chat only; send no messages
         type: boolean
         default: false
+      plain_link:
+        description: Keep link and summary text but disable preview on confirmed-unsent parts
+        type: boolean
+        default: false
 permissions:
   contents: write
 concurrency:
@@ -40,10 +44,12 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           VIDEO_ID: ${{ inputs.video_id }}
           REVIEW_LEGACY_WAIT: ${{ inputs.review_legacy_wait }}
+          PLAIN_LINK: ${{ inputs.plain_link }}
         shell: bash
         run: |
           extra=()
           if [ "$REVIEW_LEGACY_WAIT" = "true" ]; then extra+=(--review-legacy-wait); fi
+          if [ "$PLAIN_LINK" = "true" ]; then extra+=(--plain-link); fi
           python -m kairos_youtube --git-state deliver-saved --video-id "$VIDEO_ID" "${extra[@]}"
       - name: Read-only Telegram diagnostics
         if: inputs.diagnose_only == true

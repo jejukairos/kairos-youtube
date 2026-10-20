@@ -195,7 +195,9 @@ def deliver(state, video, telegram):
     state.save()
 
 
-def resume_saved(state, video_id, telegram, clock, *, review_legacy_wait=False):
+def resume_saved(
+    state, video_id, telegram, clock, *, review_legacy_wait=False, plain_link=False
+):
     """Delivery only: no Gemini credential, metadata lookup or analysis call."""
     state.recover()
     video = state.data["videos"].get(video_id)
@@ -230,6 +232,14 @@ def resume_saved(state, video_id, telegram, clock, *, review_legacy_wait=False):
         # provider deadlines cannot be cleared through this flag.
         video["legacy_delivery_wait_reviewed_at"] = clock().isoformat()
         video["retry_at"] = None
+        state.save()
+    if plain_link:
+        # Only confirmed-unsent parts may change. Keep the URL itself and all
+        # summary text; suppress fetching a preview for this reviewed delivery.
+        for part in video["parts"][len(video["sent_parts"]) :]:
+            if isinstance(part, dict):
+                part.pop("preview_url", None)
+        video["plain_link_delivery"] = True
         state.save()
     try:
         deliver(state, video, telegram)

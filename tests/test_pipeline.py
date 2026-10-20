@@ -648,6 +648,23 @@ class GeminiTests(Base):
 
 
 class DeliveryTests(Base):
+    def test_plain_link_resume_keeps_text_and_never_changes_delivered_parts(self):
+        parts = render(video(), summary())
+        original_text = [p["text"] for p in parts]
+        v = {**video(), "status": "ready", "parts": parts, "summary": summary()}
+        self.s.data["videos"][VID] = v
+        tg = Mock()
+        tg.send.side_effect = [11, 12]
+        result = resume_saved(self.s, VID, tg, self.clock, plain_link=True)
+        self.assertEqual("sent", result["delivery"])
+        self.assertEqual(original_text, [p["text"] for p in v["parts"]])
+        self.assertIsNone(tg.send.call_args_list[0].kwargs["preview_url"])
+        self.assertIn(v["url"], tg.send.call_args_list[0].args[0])
+        original_parts = json.loads(json.dumps(v["parts"]))
+        resume_saved(self.s, VID, tg, self.clock, plain_link=True)
+        self.assertEqual(original_parts, v["parts"])
+        self.assertEqual(2, tg.send.call_count)
+
     def test_saved_resume_reviews_only_legacy_wait_and_never_resets_usage(self):
         v = {
             **video(),
