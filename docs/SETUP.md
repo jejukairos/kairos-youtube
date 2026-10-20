@@ -10,7 +10,7 @@ Google 계정 로그인과 초기 보안 인증은 이미 완료된 상태입니
 4. 새 키는 대화·문서·코드·스크린샷에 복사하지 말고 GitHub의 Secret 입력란에 직접 등록합니다.
 5. 키가 속한 프로젝트의 활성 모델 한도 화면에서 `gemini-3.8-flash`의 RPM·TPM·RPD를 확인합니다. 모델이 없거나 무료 한도가 0이면 실제 분석은 활성화하지 않습니다.
 
-2026-10-19에 현재 로그인된 AI Studio의 `Default Gemini Project`에서 **무료 등급**, Billing 화면의 **결제 계정 없음**을 읽기 전용으로 확인했습니다. 모델 한도 표에서도 Gemini 3.8 Flash의 **RPM 5 / TPM 250,000 / RPD 20**, 현재 표시 사용량 0을 확인했습니다. 사용자 계정에 재로그인하거나 키를 열어보지 않았습니다. 이 한도는 변경될 수 있으므로 새 키를 등록할 때 같은 프로젝트인지 다시 확인합니다. 노출 키 폐기·새 키 등록이 아직 확인되지 않아 실제 API 호출은 차단한 상태입니다.
+2026-10-19 최초 관측에서 AI Studio의 `Default Gemini Project`에 **무료 등급**, Billing 화면에 **결제 계정 없음**을 읽기 전용으로 확인했습니다. 당시 모델 한도 표는 Gemini 3.8 Flash의 **RPM 5 / TPM 250,000 / RPD 20**, 표시 사용량 0이었습니다. 사용자 계정에 재로그인하거나 키를 열어보지 않았습니다. 이후 사용자가 새 키 등록과 현재 결제 미연결 화면을 제공해 확인 Secret을 연결했고 실제 요약 발송에 성공했습니다. 이전 노출 키 삭제는 별도 확인이 필요합니다. 최신 실제 상태는 [검증 기록](VALIDATION.md)을 참고합니다.
 
 ## 2. GitHub 저장소·인증
 
@@ -72,6 +72,8 @@ Get-Content state/free-tier-confirmation.json -Raw | gh secret set FREE_TIER_CON
 가격 문서 확인일이 30일을 넘으면 무료 모델과 YouTube 입력 가격을 공식 문서에서 다시 확인한 후 `config/policy.json`의 검토일을 갱신합니다. 단순히 날짜만 연장하지 않습니다.
 
 ## 5. 실제 연결 검증 후 정기 운영
+
+현재 실제 영상 1개 분석·요약 발송과 정규 경로 수동 실행을 검증했고 하루 4회 **자동 감시**는 활성 상태입니다. `YOUTUBE_API_KEY`가 없어 새 영상 자동 요약은 보류하며 조회·대기열 저장을 계속합니다. [남은 YouTube 키 설정](YOUTUBE_KEY_SETUP.md)을 마치면 다음 실행에서 무료 확인·할당량·영상 검사를 통과한 대기 영상을 처리합니다. 아래 절차는 처음부터 재설정할 때의 순서입니다.
 
 1. `KAIROS_ENABLED`는 비워 두거나 `false`로 둡니다. 수동 `discover`와 `smoke`만 실행할 수 있으며 예약 실행은 계속 꺼져 있습니다. Secrets 미등록·무료 확인 실패 상태에서는 영상 분석이 차단됩니다.
 2. Actions → Kairos YouTube four times daily → Run workflow → `discover`. 32개 채널 조회와 `kairos-youtube-state` 브랜치 생성을 확인합니다. 과거 영상은 발송되지 않습니다.

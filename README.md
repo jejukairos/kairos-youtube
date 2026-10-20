@@ -1,8 +1,8 @@
 # Kairos YouTube Intelligence v4.3
 
-32개 공개 YouTube 채널의 새 영상을 Gemini Developer API로 분석해 개인 Telegram으로 전달합니다. **코드·Mock 검증·공개 YouTube 조회·Telegram 연결 및 실제 테스트 발송을 완료했으며, 실제 Gemini 영상 분석과 예약 실행은 아직 완료되지 않았습니다.**
+32개 공개 YouTube 채널의 새 영상을 Gemini Developer API로 분석해 개인 Telegram으로 전달합니다. **실제 영상 한 개의 Gemini 분석·품질 검사·Telegram 요약 발송에 성공했고 하루 4회 자동 감시는 활성화했습니다. 새 영상 자동 요약은 `YOUTUBE_API_KEY` 등록 전까지 명시적으로 보류합니다.**
 
-운영 준비 저장소: https://github.com/jejukairos/kairos-youtube . `GEMINI_API_KEY` Secret 등록과 GitHub 인증을 확인했습니다. Secret 값은 읽지 않았으며, 키 교체 여부와 무료 프로젝트 확인 기록의 연결 검증 전에는 실제 AI 호출을 차단합니다. `KAIROS_ENABLED`는 아직 활성화하지 않았습니다.
+운영 저장소: https://github.com/jejukairos/kairos-youtube . Secret 값은 출력하지 않았으며, 현재 결제 계정 미연결 화면과 교체 키의 지문을 확인 기록에 연결했습니다. `KAIROS_ENABLED=true`이며 32개 채널 조회·대기열 저장은 계속합니다. GitHub 정기 실행에서는 별도 YouTube 조회 키가 없으면 Gemini를 호출하지 않고 한국어로 설정 대기를 안내합니다. [남은 YouTube 키 설정](docs/YOUTUBE_KEY_SETUP.md). 실제 cron 도착은 다음 예약 시각 이후 관측해야 합니다.
 
 기존 뉴스용 `kairos` 및 다른 수집 프로젝트와 독립된 프로그램입니다. 이 폴더의 **내용을 전용 GitHub 저장소의 루트에 배포**해야 `.github/workflows`가 작동합니다. 상위 작업 폴더 전체를 업로드하지 마세요.
 
