@@ -10,6 +10,7 @@ from .errors import (
     TelegramRateLimit,
 )
 from .guard import fingerprint, timestamp, verify_free_tier
+from .load import load_report, text_size, warn_load
 from .schedule import boundary, initialize_window
 from .telegram import deliver, render
 from .youtube import discover
@@ -79,8 +80,9 @@ def run(
         if isinstance(error, AuthError):
             state.data["pause"] = {"fingerprint": fingerprint(key), "reason": reason}
         state.error(reason, clock())
-    count, sent = 0, 0
+    count, sent, delivered_chars = 0, 0, 0
     processing_errors = []
+    warn_load(state, telegram, policy, confirmation, clock)
     queued = list(state.data["videos"].values())
     queued.sort(
         key=lambda v: (
@@ -110,7 +112,17 @@ def run(
             continue
         if video["status"] == "ready" and telegram is not None:
             try:
+                warn_load(
+                    state,
+                    telegram,
+                    policy,
+                    confirmation,
+                    clock,
+                    delivered_chars=delivered_chars,
+                )
+                chars = text_size(video)
                 deliver(state, video, telegram)
+                delivered_chars += chars
                 sent += 1
             except TelegramError as error:
                 video["last_error"] = error.code
@@ -124,6 +136,15 @@ def run(
         try:
             seconds = youtube.metadata(video)
             video["duration_seconds"] = seconds
+            warn_load(
+                state,
+                telegram,
+                policy,
+                confirmation,
+                clock,
+                delivered_chars=delivered_chars,
+                upcoming=video,
+            )
             video["status"] = "analyzing"
             video["attempts"] += 1
             state.save()
@@ -143,7 +164,17 @@ def run(
             video["retry_at"] = None
             video.pop("last_error", None)
             state.save()
+            warn_load(
+                state,
+                telegram,
+                policy,
+                confirmation,
+                clock,
+                delivered_chars=delivered_chars,
+            )
+            chars = text_size(video)
             deliver(state, video, telegram)
+            delivered_chars += chars
             sent += 1
         except KairosError as error:
             processing_errors.append(error.code)
@@ -165,6 +196,16 @@ def run(
                 video["retry_at"] = error.retry_at or gemini.guard.blocked_until()
                 reason = error.code
             state.error(error.code, clock(), video["video_id"])
+            if isinstance(error, QuotaError):
+                warn_load(
+                    state,
+                    telegram,
+                    policy,
+                    confirmation,
+                    clock,
+                    delivered_chars=delivered_chars,
+                    upcoming=video,
+                )
     pending = sum(v["status"] != "sent" for v in state.data["videos"].values())
     uncertain = sum(
         v["status"] == "delivery_uncertain" for v in state.data["videos"].values()
@@ -177,6 +218,9 @@ def run(
         "errors": failures,
         "processing_errors": processing_errors,
         "processing_held": reason == "youtube_api_key_missing_processing_held",
+        "load": load_report(
+            state, policy, confirmation, clock(), delivered_chars=delivered_chars
+        ),
     }
     state.data["runs"].append({"at": started.isoformat(), **result})
     state.data["runs"] = state.data["runs"][-120:]
@@ -219,6 +263,15 @@ def send_briefing(state, telegram, started, result, namespace="briefing"):
         f"\n분석·발송 오류 {len(result.get('processing_errors', []))}건"
         f"\n상태: {status or ('일부 처리 보류' if result.get('processing_errors') else '완료')}\n무료 한도 대기 영상은 다음 이용 가능 시점에 이월합니다."
     )
+    load = result.get("load")
+    if load:
+        budget = load["budgets"]["requests"]
+        limit = budget["limit"] or "미확인"
+        text += (
+            f"\n\n분석 대기 {load['pending_videos']}개 · 길이 미확인 {load['unknown_duration_videos']}개"
+            f"\nGemini 요청 예약 {budget['used']}/{limit}회 (프로그램 장부)"
+            f"\n이번 요약 분량 {load['summary_characters']:,}자"
+        )
     try:
         briefing["message_id"] = telegram.send(text)
         briefing["status"] = "sent"

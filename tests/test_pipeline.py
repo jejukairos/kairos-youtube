@@ -914,6 +914,21 @@ class DeliveryTests(Base):
 
 
 class RunnerTests(Base):
+    def test_load_warning_is_sent_before_video_analysis_without_changing_channels(self):
+        yt, gemini, tg = self.setup_clients()
+        self.c["rpm"] = 20
+        self.g.reserve(provider="gemini", requests=14)
+        order = []
+        tg.send.side_effect = lambda *args, **kwargs: order.append("telegram") or 42
+        gemini.summarize.side_effect = lambda *args: (
+            order.append("analysis") or summary()
+        )
+        self.execute(yt, gemini, tg)
+        self.assertEqual("telegram", order[0])
+        self.assertIn("영상 처리량 사전 안내", tg.send.call_args_list[0].args[0])
+        self.assertEqual(1, gemini.summarize.call_count)
+        self.assertEqual({}, self.s.data["channels"])
+
     def test_missing_youtube_key_allows_saved_delivery_but_no_ai(self):
         yt, gemini, tg = self.setup_clients()
         yt.api_key = ""

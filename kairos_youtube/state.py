@@ -187,9 +187,10 @@ class State:
         for b in self.data["briefings"].values():
             if b["status"] == "sending":
                 b["status"] = "delivery_uncertain"
-        for outbox in self.data.get("presentations", {}).values():
-            if outbox["status"] == "sending":
-                outbox["status"] = "delivery_uncertain"
+        for namespace in ("presentations", "load_alerts"):
+            for outbox in self.data.get(namespace, {}).values():
+                if outbox["status"] == "sending":
+                    outbox["status"] = "delivery_uncertain"
         self.save()
 
     def snapshot(self):

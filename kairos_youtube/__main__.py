@@ -19,6 +19,7 @@ from .guard import (
     verify_free_tier,
 )
 from .http import Http
+from .load import load_report, warn_load
 from .runner import run
 from .state import GitCheckpoint, State, exclusive_lock, git
 from .telegram import Telegram, resume_saved, send_preview_test
@@ -234,6 +235,10 @@ def main():
     sub.add_parser("discover")
     sub.add_parser("status")
     sub.add_parser("watchdog")
+    load = sub.add_parser(
+        "load-status", help="Read local free-budget and queue usage without AI"
+    )
+    load.add_argument("--notify", action="store_true")
     preview = sub.add_parser("preview-test")
     preview.add_argument("--video-id", required=True)
     delivery = sub.add_parser(
@@ -309,6 +314,13 @@ def execute(args):
         return 0
     if args.command == "watchdog":
         return watchdog(args, s, http)
+    if args.command == "load-status":
+        if args.notify:
+            result = warn_load(s, telegram(http), config, load_confirmation(), now)
+        else:
+            result = load_report(s, config, load_confirmation(), now())
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
     if args.command == "deliver-saved":
         result = resume_saved(
             s,

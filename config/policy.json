@@ -16,5 +16,12 @@
   "collection_initial_start": "2026-10-19T02:30:00+00:00",
   "collection_first_run": "2026-10-20T02:30:00+00:00",
   "youtube_units_per_day": 1000,
-  "priority_aging_days": 3
+  "priority_aging_days": 3,
+  "load_warning": {
+    "usage_percent": 70,
+    "critical_percent": 90,
+    "pending_videos": 10,
+    "pending_seconds": 10800,
+    "summary_characters": 12000
+  }
 }

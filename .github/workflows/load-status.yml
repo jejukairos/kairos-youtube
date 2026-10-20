@@ -1,0 +1,38 @@
+name: Check YouTube workload without AI
+on:
+  workflow_dispatch:
+    inputs:
+      notify:
+        description: Send one threshold-based warning to the fixed Telegram chat
+        type: boolean
+        default: true
+permissions:
+  contents: write
+concurrency:
+  group: kairos-youtube-state
+  cancel-in-progress: false
+jobs:
+  load:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline regression tests
+        run: python -m unittest discover -s tests -v
+      - name: Read workload and optionally notify
+        env:
+          FREE_TIER_CONFIRMATION: ${{ secrets.FREE_TIER_CONFIRMATION }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          NOTIFY: ${{ inputs.notify }}
+        shell: bash
+        run: |
+          extra=()
+          if [ "$NOTIFY" = "true" ]; then extra+=(--notify); fi
+          python -m kairos_youtube --git-state load-status "${extra[@]}"
