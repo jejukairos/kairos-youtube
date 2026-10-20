@@ -1,8 +1,8 @@
 # Kairos YouTube Intelligence v4.3
 
-32개 공개 YouTube 채널의 새 영상을 Gemini Developer API로 분석해 개인 Telegram으로 전달합니다. **실제 영상 분석·검사·Telegram 발송에 성공했고 하루 4회 자동 감시를 활성화했습니다. 사용자의 `YOUTUBE_API_KEY` 등록 후 공식 영상 정보 조회부터 Gemini 요약·Telegram 발송까지 실제 연결을 확인했습니다. 무료 예산 부족·공급자 응답 오류로 처리하지 못한 영상은 이월합니다.**
+## Current operation: paused (2026-10-20)
 
-운영 저장소: https://github.com/jejukairos/kairos-youtube . Secret 값은 출력하지 않았으며, 결제 계정 미연결 화면과 교체 키의 지문을 확인 기록에 연결했습니다. `KAIROS_ENABLED=true`이며 32개 채널 조회·대기열 저장을 계속합니다. YouTube 조회 키가 누락되면 Gemini를 호출하지 않고 한국어로 설정 대기를 안내합니다. [YouTube 키 설정·연결 상태](docs/YOUTUBE_KEY_SETUP.md). 2026-10-20 첫 예약 이벤트 도착은 관측했으나 해당 실행의 분석 오류와 시간 예산 초과를 모든 영상 발송 성공으로 표시하지 않습니다. 최신 실제 결과는 [검증 기록](docs/VALIDATION.md)에 남깁니다.
+The user paused this automation and chose to provide video transcripts in the conversation for manual summaries. YouTube collection, Gemini API analysis, scheduled Telegram briefings, and watchdog notifications are stopped. The GitHub repository variable `KAIROS_ENABLED` is `false`, and all nine workflows are `disabled_manually`. No workflow was running when suspension was verified. Existing source files, pending videos, delivery records, and stored secrets are preserved; this change does not revoke provider API keys. Resume only on a new user request. The implementation and validation details below describe the retained previous setup, not an active service.
 
 기존 뉴스용 `kairos` 및 다른 수집 프로젝트와 독립된 프로그램입니다. 이 폴더의 **내용을 전용 GitHub 저장소의 루트에 배포**해야 `.github/workflows`가 작동합니다. 상위 작업 폴더 전체를 업로드하지 마세요.
 
