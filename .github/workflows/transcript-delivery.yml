@@ -1,0 +1,36 @@
+name: Transcript summary delivery (manual, no AI)
+on:
+  workflow_dispatch:
+    inputs:
+      bundle:
+        description: Locally reviewed delivery bundle (base64 JSON); never an API key
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: kairos-youtube-state
+  cancel-in-progress: false
+jobs:
+  deliver:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install open source dependencies
+        run: python -m pip install -r transcript-mvp/requirements.txt -r transcript-mvp/requirements-optional.txt
+      - name: Run offline tests
+        working-directory: transcript-mvp
+        run: python -m unittest discover -s tests -v
+      - name: Deliver reviewed summary (no Google or AI calls)
+        working-directory: transcript-mvp
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DELIVERY_BUNDLE_BASE64: ${{ inputs.bundle }}
+        run: python github_delivery.py

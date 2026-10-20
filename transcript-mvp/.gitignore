@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+transcripts/
+.env
+.env.*
+!.env.example
+summaries/
+state/
+*.sqlite3*
+.ruff_cache/
+dist/

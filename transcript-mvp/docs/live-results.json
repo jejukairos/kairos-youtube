@@ -1,0 +1,78 @@
+{
+  "checked_at_utc": "2026-10-20T05:19:21.029282+00:00",
+  "python": "3.12",
+  "dependencies": {
+    "youtube-transcript-api": "1.2.4",
+    "yt-dlp": "2026.8.19",
+    "requests": "2.34.2"
+  },
+  "primary_live": [
+    {
+      "video_id": "L2GG_DeUDa0",
+      "title": "지옥 같은 코스피에서 살아남을 단어 '양극단' | 윤지호 경제평론가 [주말인터뷰]",
+      "channel": "삼프로TV 3PROTV",
+      "captions_language": "ko",
+      "captions_generated": true,
+      "fetched_at_utc": "2026-10-20T05:08:33.825744+00:00",
+      "source": "youtube-transcript-api",
+      "status": "OK",
+      "segments": 1283,
+      "characters": 22515,
+      "last_caption_end": 2618.72
+    },
+    {
+      "video_id": "n6nO1MkYId0",
+      "title": "수급보다 중요한 것을 놓치고 있습니다 (이은택) | 인포맥스라이브 2026년 10월19일 방송",
+      "channel": "연합뉴스경제TV",
+      "captions_language": "ko",
+      "captions_generated": true,
+      "fetched_at_utc": "2026-10-20T05:08:36.993136+00:00",
+      "source": "youtube-transcript-api",
+      "status": "OK",
+      "segments": 1361,
+      "characters": 24120,
+      "last_caption_end": 2631.68
+    },
+    {
+      "video_id": "QslXeEZ0tPI",
+      "title": "코스피 IMF급 폭락, 7일 동안 -20%... 반등은 '이때' 입니다!",
+      "channel": "재테크읽어주는 파일럿",
+      "captions_language": "ko",
+      "captions_generated": true,
+      "fetched_at_utc": "2026-10-20T05:08:40.014115+00:00",
+      "source": "youtube-transcript-api",
+      "status": "OK",
+      "segments": 424,
+      "characters": 8128,
+      "last_caption_end": 1011.24
+    }
+  ],
+  "fallback_live": [
+    {
+      "video_id": "L2GG_DeUDa0",
+      "url": "https://www.youtube.com/watch?v=L2GG_DeUDa0",
+      "checked_at_utc": "2026-10-20T05:09:17.337996+00:00",
+      "status": "OK",
+      "language": "ko-orig",
+      "source": "yt-dlp-subtitles-only",
+      "segments": 1283,
+      "characters": 22515,
+      "json_path": "L2GG_DeUDa0.json",
+      "text_path": "L2GG_DeUDa0.txt"
+    }
+  ],
+  "automatic_summary": {
+    "status": "SKIPPED",
+    "reason": "NO_LOCAL_AI_MODEL"
+  },
+  "reviewed_summary": {
+    "video_id": "L2GG_DeUDa0",
+    "points": 11,
+    "importance": 5,
+    "external_fact_check": false
+  },
+  "local_tests": 24,
+  "telegram_actual": "PENDING_REMOTE_VALIDATION",
+  "google_api_calls": 0,
+  "paid_api_calls": 0
+}
