@@ -664,6 +664,27 @@ class DeliveryTests(Base):
 
 
 class RunnerTests(Base):
+    def test_cloud_monitor_without_youtube_key_keeps_queue_and_never_calls_ai(self):
+        yt, gemini, tg = self.setup_clients()
+        yt.api_key = ""
+        result = run(
+            self.s,
+            [],
+            yt,
+            gemini,
+            tg,
+            self.p,
+            self.c,
+            KEY,
+            self.clock,
+            require_youtube_api=True,
+        )
+        self.assertTrue(result["processing_held"])
+        self.assertEqual("pending", self.s.data["videos"][VID]["status"])
+        gemini.check_model.assert_not_called()
+        gemini.summarize.assert_not_called()
+        self.assertIn("YouTube 조회 키 등록 대기", tg.send.call_args.args[0])
+
     def test_four_daily_briefings_are_distinct_and_each_rerun_is_suppressed(self):
         tg = Mock()
         tg.send.return_value = 42

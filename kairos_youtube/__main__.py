@@ -383,8 +383,18 @@ def execute(args):
         discovery_only=args.command == "discover",
         max_videos=1 if args.command == "smoke" else None,
         only_video_id=vid if args.command == "smoke" else None,
+        require_youtube_api=args.command == "run"
+        and os.environ.get("GITHUB_ACTIONS") == "true",
     )
     print(json.dumps(result, ensure_ascii=False))
+    # A scheduled discovery can complete while explicitly holding AI work for
+    # a missing metadata credential. This is never a successful smoke result.
+    if (
+        args.command == "run"
+        and result.get("processing_held")
+        and not result.get("errors")
+    ):
+        return 0
     smoke_incomplete = (
         args.command == "smoke" and s.data["videos"][vid]["status"] != "sent"
     )
