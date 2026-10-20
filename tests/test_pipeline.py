@@ -27,7 +27,14 @@ from kairos_youtube.guard import Guard, fingerprint, timestamp, verify_free_tier
 from kairos_youtube.http import Http, Response
 from kairos_youtube.runner import briefing_slot, run, send_briefing
 from kairos_youtube.state import State
-from kairos_youtube.telegram import Telegram, deliver, render, send_preview_test, units
+from kairos_youtube.telegram import (
+    Telegram,
+    deliver,
+    render,
+    resume_saved,
+    send_preview_test,
+    units,
+)
 from kairos_youtube.youtube import YouTube, discover
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -641,6 +648,69 @@ class GeminiTests(Base):
 
 
 class DeliveryTests(Base):
+    def test_saved_resume_reviews_only_legacy_wait_and_never_resets_usage(self):
+        v = {
+            **video(),
+            "status": "ready",
+            "parts": ["card", "body"],
+            "summary": summary(),
+            "last_error": "telegram_send_failed",
+            "retry_at": (NOW + timedelta(hours=4)).isoformat(),
+        }
+        self.s.data["videos"][VID] = v
+        self.s.data["errors"].append(
+            {
+                "code": "telegram_http_429_rate_limited",
+                "at": (NOW - timedelta(minutes=10)).isoformat(),
+                "video_id": VID,
+            }
+        )
+        self.g.reserve(provider="gemini", tokens=1000)
+        before = list(self.s.data["reservations"])
+        tg = Mock()
+        tg.send.side_effect = [11, 12]
+        result = resume_saved(self.s, VID, tg, self.clock, review_legacy_wait=True)
+        self.assertEqual("sent", result["delivery"])
+        self.assertEqual([11, 12], v["sent_parts"])
+        self.assertEqual(before, self.s.data["reservations"])
+        resume_saved(State(self.s.path), VID, tg, self.clock, review_legacy_wait=True)
+        self.assertEqual(2, tg.send.call_count)
+
+    def test_saved_resume_never_overrides_provider_wait_or_uncertain_delivery(self):
+        v = {
+            **video(),
+            "status": "ready",
+            "parts": ["saved"],
+            "summary": summary(),
+            "retry_at": (NOW + timedelta(minutes=5)).isoformat(),
+            "telegram_retry_at": (NOW + timedelta(minutes=5)).isoformat(),
+        }
+        self.s.data["videos"][VID] = v
+        tg = Mock()
+        result = resume_saved(self.s, VID, tg, self.clock, review_legacy_wait=True)
+        self.assertEqual("waiting", result["delivery"])
+        tg.send.assert_not_called()
+        v["status"] = "delivery_uncertain"
+        with self.assertRaises(PolicyError):
+            resume_saved(self.s, VID, tg, self.clock, review_legacy_wait=True)
+        tg.send.assert_not_called()
+
+    def test_saved_resume_sends_remaining_part_only(self):
+        v = {
+            **video(),
+            "status": "ready",
+            "parts": ["card", "body"],
+            "summary": summary(),
+            "sent_parts": [11],
+        }
+        self.s.data["videos"][VID] = v
+        tg = Mock()
+        tg.send.return_value = 12
+        result = resume_saved(self.s, VID, tg, self.clock)
+        self.assertEqual("sent", result["delivery"])
+        tg.send.assert_called_once_with("body")
+        self.assertEqual([11, 12], v["sent_parts"])
+
     def test_rate_limit_wait_is_saved_and_no_partial_message_is_marked_sent(self):
         http = Mock()
         http.request.return_value = response(
@@ -656,6 +726,11 @@ class DeliveryTests(Base):
         self.assertEqual("ready", saved["status"])
         self.assertEqual([], saved["sent_parts"])
         self.assertGreater(timestamp(saved["retry_at"]), datetime.now(timezone.utc))
+        self.assertEqual(saved["retry_at"], saved["telegram_retry_at"])
+        other = {**video(), "parts": ["other saved summary"]}
+        with self.assertRaises(TelegramRateLimit):
+            deliver(self.s, other, Telegram(http, "fixture-token", "123"))
+        self.assertEqual(1, http.request.call_count)
 
     def test_style_and_emoji_length(self):
         data = summary()

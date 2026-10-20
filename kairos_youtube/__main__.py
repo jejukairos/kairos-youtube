@@ -21,7 +21,7 @@ from .guard import (
 from .http import Http
 from .runner import run
 from .state import GitCheckpoint, State, exclusive_lock, git
-from .telegram import Telegram, send_preview_test
+from .telegram import Telegram, resume_saved, send_preview_test
 from .youtube import YouTube
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -236,6 +236,11 @@ def main():
     sub.add_parser("watchdog")
     preview = sub.add_parser("preview-test")
     preview.add_argument("--video-id", required=True)
+    delivery = sub.add_parser(
+        "deliver-saved", help="Resume one saved summary without AI"
+    )
+    delivery.add_argument("--video-id", required=True)
+    delivery.add_argument("--review-legacy-wait", action="store_true")
     p = sub.add_parser("probe")
     p.add_argument("--sample-duration", action="store_true")
     p.add_argument("--inspect-feed", action="store_true")
@@ -303,6 +308,16 @@ def execute(args):
         return 0
     if args.command == "watchdog":
         return watchdog(args, s, http)
+    if args.command == "deliver-saved":
+        result = resume_saved(
+            s,
+            args.video_id,
+            telegram(http),
+            now,
+            review_legacy_wait=args.review_legacy_wait,
+        )
+        print(json.dumps(result, ensure_ascii=False))
+        return 0 if result["delivery"] == "sent" else 3
     if args.command == "preview-test":
         result = send_preview_test(s, args.video_id, channels(), telegram(http))
         print(json.dumps(result, ensure_ascii=False))

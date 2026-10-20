@@ -1,0 +1,42 @@
+name: Deliver saved YouTube summary without AI
+on:
+  workflow_dispatch:
+    inputs:
+      video_id:
+        description: Saved ready video ID explicitly requested for delivery
+        type: string
+        required: true
+      review_legacy_wait:
+        description: One reviewed retry of old application backoff; never overrides Telegram retry_after
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency:
+  group: kairos-youtube-state
+  cancel-in-progress: false
+jobs:
+  deliver:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline regression tests
+        run: python -m unittest discover -s tests -v
+      - name: Resume saved delivery only
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          VIDEO_ID: ${{ inputs.video_id }}
+          REVIEW_LEGACY_WAIT: ${{ inputs.review_legacy_wait }}
+        shell: bash
+        run: |
+          extra=()
+          if [ "$REVIEW_LEGACY_WAIT" = "true" ]; then extra+=(--review-legacy-wait); fi
+          python -m kairos_youtube --git-state deliver-saved --video-id "$VIDEO_ID" "${extra[@]}"

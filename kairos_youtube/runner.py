@@ -194,6 +194,9 @@ def briefing_slot(started, namespace="briefing"):
 def send_briefing(state, telegram, started, result, namespace="briefing"):
     if telegram is None:
         return
+    blocked = state.data.get("telegram_blocked_until")
+    if blocked and timestamp(blocked) > started:
+        return
     slot = briefing_slot(started, namespace)
     previous = state.data["briefings"].get(slot)
     if previous and previous["status"] in ("sent", "sending", "delivery_uncertain"):
