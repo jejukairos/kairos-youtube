@@ -199,6 +199,19 @@ class SecurityTests(Base):
 
 
 class QuotaTests(Base):
+    def test_daily_exhaustion_waits_for_pacific_reset_without_24h_penalty(self):
+        self.clock.return_value = datetime(2026, 10, 20, 6, 59, tzinfo=timezone.utc)
+        self.c["rpd"] = 1
+        self.g.reserve(provider="gemini")
+        with self.assertRaises(QuotaError) as caught:
+            self.g.reserve(provider="gemini")
+        self.assertEqual(
+            datetime(2026, 10, 20, 7, 0, tzinfo=timezone.utc),
+            timestamp(caught.exception.retry_at),
+        )
+        self.clock.return_value += timedelta(minutes=2)
+        self.g.reserve(provider="gemini")
+
     def test_rpd_survives_restart(self):
         self.c["rpd"] = 1
         self.g.reserve(provider="gemini", seconds=100, tokens=100)

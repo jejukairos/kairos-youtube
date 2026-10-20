@@ -145,7 +145,11 @@ class Guard:
             exceeded = [i for i, (used, cap) in enumerate(caps) if used > cap]
             if exceeded:
                 retry = self.blocked_until()
-                if all(i in (1, 2) for i in exceeded):
+                if 4 not in exceeded and any(i in (0, 3) for i in exceeded):
+                    # Documented daily request/token windows reset at Pacific
+                    # midnight. Do not add an unnecessary rolling 24h wait.
+                    retry = self.daily_reset().isoformat()
+                elif all(i in (1, 2) for i in exceeded):
                     # Single requests larger than TPM cannot fit later either.
                     retry = (
                         (now + timedelta(seconds=62)).isoformat()
@@ -175,12 +179,15 @@ class Guard:
 
     def blocked_until(self):
         now = self.clock()
-        local = now.astimezone(PACIFIC)
+        # Video reset is undocumented; rolling 24h is deliberately stricter.
+        return max(self.daily_reset(), now + timedelta(hours=24)).isoformat()
+
+    def daily_reset(self):
+        local = self.clock().astimezone(PACIFIC)
         reset = datetime.combine(
             local.date() + timedelta(days=1), datetime.min.time(), PACIFIC
         )
-        # Video reset is undocumented; rolling 24h is deliberately stricter.
-        return max(reset.astimezone(UTC), now + timedelta(hours=24)).isoformat()
+        return reset.astimezone(UTC)
 
 
 def load_confirmation():
