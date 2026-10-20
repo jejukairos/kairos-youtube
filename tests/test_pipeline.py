@@ -26,7 +26,7 @@ from kairos_youtube.guard import Guard, fingerprint, timestamp, verify_free_tier
 from kairos_youtube.http import Http, Response
 from kairos_youtube.runner import briefing_slot, run, send_briefing
 from kairos_youtube.state import State
-from kairos_youtube.telegram import Telegram, deliver, render, units
+from kairos_youtube.telegram import Telegram, deliver, render, send_preview_test, units
 from kairos_youtube.youtube import YouTube, discover
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -605,15 +605,18 @@ class DeliveryTests(Base):
             b["text"] *= 30
         messages = render(video(), data)
         self.assertGreater(len(messages), 1)
+        self.assertEqual(video()["url"], messages[0]["preview_url"])
+        self.assertIn(video()["url"], messages[0]["text"])
         self.assertTrue(
             all(
-                m.startswith("📊 ")
-                and "▶️ " in m
-                and video()["url"] in m
-                and units(m) <= 4096
-                for m in messages
+                m["text"].startswith("📊 ")
+                and "▶️ " in m["text"]
+                and video()["url"] not in m["text"]
+                and "preview_url" not in m
+                for m in messages[1:]
             )
         )
+        self.assertTrue(all(units(m["text"]) <= 4096 for m in messages))
 
     def test_fixed_chat_and_plain_text_only(self):
         http = Mock()
@@ -625,6 +628,88 @@ class DeliveryTests(Base):
         payload = http.request.call_args.kwargs["payload"]
         self.assertEqual("123", payload["chat_id"])
         self.assertNotIn("parse_mode", payload)
+        self.assertEqual({"is_disabled": True}, payload["link_preview_options"])
+
+    def test_youtube_card_requests_large_preview_above_channel_and_title(self):
+        http = Mock()
+        http.request.return_value = response(
+            {"ok": True, "result": {"message_id": 42, "chat": {"id": 123}}}
+        )
+        source = {**video(), "channel_name": "테스트 채널"}
+        card = render(source, summary())[0]
+        tg = Telegram(http, "fixture-token", "123")
+        tg.send(card["text"], preview_url=card["preview_url"])
+        payload = http.request.call_args.kwargs["payload"]
+        self.assertIn("📺 테스트 채널", payload["text"])
+        self.assertIn(source["title"], payload["text"])
+        self.assertEqual(
+            {
+                "is_disabled": False,
+                "url": source["url"],
+                "prefer_large_media": True,
+                "show_above_text": True,
+            },
+            payload["link_preview_options"],
+        )
+        with self.assertRaises(TelegramError):
+            tg.send("fixture", preview_url=source["url"])
+        self.assertEqual(1, http.request.call_count)
+
+    def setup_saved_preview(self):
+        v = {
+            **video(),
+            "status": "sent",
+            "duration_seconds": 100,
+            "summary": summary(),
+            "parts": ["original"],
+            "sent_parts": [5],
+        }
+        self.s.data["videos"][VID] = v
+        return v, [{"channel_id": CID, "name": "테스트 채널"}]
+
+    def test_preview_test_reuses_summary_once_without_changing_original(self):
+        v, rows = self.setup_saved_preview()
+        tg = Mock()
+        tg.send.side_effect = [11, 12]
+        reservations = list(self.s.data["reservations"])
+        result = send_preview_test(self.s, VID, rows, tg)
+        self.assertEqual(2, result["message_count"])
+        self.assertEqual([5], v["sent_parts"])
+        self.assertEqual(reservations, self.s.data["reservations"])
+        restarted = State(self.s.path)
+        send_preview_test(restarted, VID, rows, tg)
+        self.assertEqual(2, tg.send.call_count)
+        self.assertEqual(
+            video()["url"], tg.send.call_args_list[0].kwargs["preview_url"]
+        )
+        self.assertIsNone(tg.send.call_args_list[1].kwargs["preview_url"])
+
+    def test_preview_test_resumes_only_summary_after_definite_second_failure(self):
+        _, rows = self.setup_saved_preview()
+        tg = Mock()
+        tg.send.side_effect = [11, TelegramError()]
+        with self.assertRaises(TelegramError):
+            send_preview_test(self.s, VID, rows, tg)
+        second = Mock()
+        second.send.return_value = 12
+        send_preview_test(State(self.s.path), VID, rows, second)
+        self.assertEqual(1, second.send.call_count)
+        self.assertIn("▶️", second.send.call_args.args[0])
+
+    def test_preview_test_uncertain_card_is_not_resent_after_restart(self):
+        _, rows = self.setup_saved_preview()
+        tg = Mock()
+        tg.send.side_effect = UncertainDelivery()
+        with self.assertRaises(UncertainDelivery):
+            send_preview_test(self.s, VID, rows, tg)
+        restarted = State(self.s.path)
+        with self.assertRaises(PolicyError):
+            send_preview_test(restarted, VID, rows, tg)
+        self.assertEqual(1, tg.send.call_count)
+        outbox = next(iter(restarted.data["presentations"].values()))
+        outbox["status"] = "sending"
+        restarted.recover()
+        self.assertEqual("delivery_uncertain", outbox["status"])
 
     def test_failure_after_first_part_resumes_remaining_only(self):
         v = video()
@@ -783,8 +868,8 @@ class RunnerTests(Base):
         self.execute(yt, gemini, tg)
         self.execute(yt, gemini, tg)
         gemini.summarize.assert_called_once()
-        # One summary and one briefing for the UTC slot.
-        self.assertEqual(2, tg.send.call_count)
+        # One preview card, one summary and one briefing for the UTC slot.
+        self.assertEqual(3, tg.send.call_count)
 
     def test_auth_failure_persists_pause(self):
         yt, gemini, tg = self.setup_clients()

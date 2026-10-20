@@ -34,13 +34,19 @@ def render(video, summary):
     if body:
         messages.append(body)
     total = len(messages)
+    channel = " ".join(video.get("channel_name", "YouTube").split())[:150]
     return [
-        f"📊 {title}"
-        + (f" ({i}/{total})" if total > 1 else "")
-        + "\n\n"
-        + text
-        + "\n\n🔗 "
-        + video["url"]
+        {
+            "text": f"📺 {channel}\n📊 {title}\n\n{video['url']}",
+            "preview_url": video["url"],
+        }
+    ] + [
+        {
+            "text": f"📊 {title}"
+            + (f" ({i}/{total})" if total > 1 else "")
+            + "\n\n"
+            + text
+        }
         for i, text in enumerate(messages, 1)
     ]
 
@@ -51,9 +57,24 @@ class Telegram:
             raise TelegramError("telegram_secrets_missing_or_invalid")
         self.http, self.token, self.chat_id = http, token, chat_id
 
-    def send(self, text):
+    def send(self, text, *, preview_url=None):
         if units(text) > 4096:
             raise TelegramError("telegram_message_too_long")
+        preview = {"is_disabled": True}
+        if preview_url is not None:
+            if (
+                not re.fullmatch(
+                    r"https://www\.youtube\.com/watch\?v=[\w-]{11}", preview_url
+                )
+                or preview_url not in text
+            ):
+                raise TelegramError("telegram_preview_url_invalid")
+            preview = {
+                "is_disabled": False,
+                "url": preview_url,
+                "prefer_large_media": True,
+                "show_above_text": True,
+            }
         try:
             response = self.http.request(
                 "POST",
@@ -61,7 +82,7 @@ class Telegram:
                 payload={
                     "chat_id": self.chat_id,
                     "text": text,
-                    "link_preview_options": {"is_disabled": True},
+                    "link_preview_options": preview,
                 },
                 timeout=40,
             )
@@ -94,7 +115,12 @@ def deliver(state, video, telegram):
         video["status"] = "sending"
         state.save()  # Persist before Telegram can accept the message.
         try:
-            mid = telegram.send(part)
+            # Existing persisted string parts keep their original delivery format.
+            mid = (
+                telegram.send(part["text"], preview_url=part.get("preview_url"))
+                if isinstance(part, dict)
+                else telegram.send(part)
+            )
         except UncertainDelivery:
             video["status"] = "delivery_uncertain"
             state.save()
@@ -108,3 +134,38 @@ def deliver(state, video, telegram):
         state.save()
     video["status"] = "sent"
     state.save()
+
+
+def send_preview_test(state, video_id, channels, telegram):
+    """Reuse a saved summary once; never analyze again or reset sent videos."""
+    from .errors import PolicyError
+    from .gemini import validate_summary
+
+    video = state.data["videos"].get(video_id)
+    names = {row["channel_id"]: row["name"] for row in channels}
+    if not video or video["status"] != "sent" or video["channel_id"] not in names:
+        raise PolicyError("preview_test_requires_sent_registered_video")
+    validate_summary(video["summary"], video, video["duration_seconds"])
+    state.recover()
+    demos = state.data.setdefault("presentations", {})
+    slot = "youtube-preview-v1:" + video_id
+    if slot not in demos:
+        source = {**video, "channel_name": names[video["channel_id"]]}
+        demos[slot] = {
+            "status": "ready",
+            "parts": render(source, video["summary"]),
+            "sent_parts": [],
+        }
+        state.save()
+    outbox = demos[slot]
+    if outbox["status"] == "delivery_uncertain":
+        raise PolicyError("preview_test_delivery_uncertain_check_chat")
+    if telegram is None:
+        raise PolicyError("telegram_secrets_missing_or_invalid")
+    if outbox["status"] != "sent":
+        deliver(state, outbox, telegram)
+    return {
+        "preview_test": outbox["status"],
+        "message_count": len(outbox["sent_parts"]),
+        "video_id": video_id,
+    }

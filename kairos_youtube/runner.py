@@ -97,6 +97,14 @@ def run(
             count += 1
             summary = gemini.summarize(video, seconds)
             video["summary"] = summary
+            video["channel_name"] = next(
+                (
+                    row["name"]
+                    for row in channels
+                    if row["channel_id"] == video["channel_id"]
+                ),
+                "YouTube",
+            )
             video["parts"] = render(video, summary)
             video["status"] = "ready"
             video["retry_at"] = None
