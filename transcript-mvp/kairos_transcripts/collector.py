@@ -220,7 +220,8 @@ def fetch_ytdlp(video_id):
         for generated, key in [(False, 'subtitles'), (True, 'automatic_captions')]:
             for language, formats in (info.get(key) or {}).items():
                 for preferred in ('json3', 'vtt', 'srt'):
-                    match = next((f for f in formats if f.get('ext') == preferred), None)
+                    match = next((f for f in formats if f.get('ext') == preferred
+                                  and not parse_qs(urlparse(f.get('url', '')).query).get('tlang')), None)
                     if match:
                         tracks.append((generated, language_rank(language), language, match))
                         break

@@ -71,8 +71,17 @@
     "importance": 5,
     "external_fact_check": false
   },
-  "local_tests": 24,
-  "telegram_actual": "PENDING_REMOTE_VALIDATION",
+  "local_tests": 26,
+  "telegram_actual": {
+    "status": "SENT",
+    "video_id": "L2GG_DeUDa0",
+    "parts": 2,
+    "message_ids": [
+      18,
+      19
+    ],
+    "workflow_run": 39374288301
+  },
   "google_api_calls": 0,
   "paid_api_calls": 0
 }

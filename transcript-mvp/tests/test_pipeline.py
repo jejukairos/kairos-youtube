@@ -136,6 +136,19 @@ class CollectorTests(unittest.TestCase):
                 f'https://www.youtube.com/watch?v={VID}', download=False)
             self.assertEqual(result['captions_generated'], False)
 
+    def test_ytdlp_preserves_original_language_instead_of_auto_translation(self):
+        info = {'subtitles': {}, 'automatic_captions': {
+            'ko': [{'ext': 'json3', 'url': 'https://www.youtube.com/api/timedtext?lang=en&tlang=ko'}],
+            'en': [{'ext': 'json3', 'url': 'https://www.youtube.com/api/timedtext?lang=en'}]}}
+        response = Mock(text=json.dumps({'events': [{'tStartMs': 0, 'dDurationMs': 1000,
+                                                    'segs': [{'utf8': 'original English'}]}]}))
+        with patch('yt_dlp.YoutubeDL') as downloader, patch('kairos_transcripts.collector.TimedSession') as session:
+            downloader.return_value.__enter__.return_value.extract_info.return_value = info
+            session.return_value.get.return_value = response
+            result = fetch_ytdlp(VID)
+            self.assertEqual(result['captions_language'], 'en')
+            self.assertNotIn('tlang=', session.return_value.get.call_args.args[0])
+
 
 class SummaryTests(unittest.TestCase):
     def test_actual_quotes_and_source_binding(self):
@@ -259,6 +272,22 @@ class TelegramTests(unittest.TestCase):
         with self.assertRaisesRegex(Problem, 'CHECKPOINT_FAILED'):
             self.outbox.deliver(self.bundle, client)
         client.send.assert_not_called()
+
+    def test_second_sender_cannot_claim_a_part_already_in_flight(self):
+        other = Outbox(Path(self.tmp.name) / 'state.sqlite3')
+        rival = self.client([])
+        observed = []
+        def send(part):
+            observed.append(other.deliver(self.bundle, rival)['status'])
+            return {'status': 'SENT', 'message_id': len(observed)}
+        first = self.client([])
+        first.send.side_effect = send
+        try:
+            self.assertEqual(self.outbox.deliver(self.bundle, first)['status'], 'SENT')
+        finally:
+            other.close()
+        self.assertEqual(observed, ['UNCERTAIN', 'UNCERTAIN'])
+        rival.send.assert_not_called()
 
     def test_transport_classifies_429_and_never_redirects(self):
         session = Mock()
