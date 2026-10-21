@@ -29,7 +29,7 @@ def main(argv=None):
     p.add_argument('--backend', choices=['transcript-api', 'yt-dlp'], default='transcript-api')
     p.add_argument('--fallback-yt-dlp', action='store_true')
     p.add_argument('--sleep', type=float, default=1.5)
-    p = commands.add_parser('import-transcript', help='사용자가 가진 JSON/SRT/VTT 가져오기')
+    p = commands.add_parser('import-transcript', help='사용자가 가진 JSON/SRT/VTT/시간표시 TXT 가져오기')
     p.add_argument('file', type=Path)
     p.add_argument('--video-url', required=True)
     p.add_argument('--title', required=True)
@@ -66,7 +66,7 @@ def main(argv=None):
                               'counts': dict(Counter(r['status'] for r in results))}))
             return 0 if results and all(r['status'] in ('OK', 'CACHED') for r in results) else 2
         if args.command == 'import-transcript':
-            from .collector import parse_subtitle
+            from .collector import parse_subtitle, parse_youtube_text
             video_id = extract_id(args.video_url)
             if not video_id:
                 raise Problem('INVALID_URL')
@@ -75,8 +75,10 @@ def main(argv=None):
                 segments = source.get('segments') if isinstance(source, dict) else source
             elif args.file.suffix.lower() in ('.srt', '.vtt'):
                 segments = parse_subtitle(args.file.read_text(encoding='utf-8-sig'), args.file.suffix[1:])
+            elif args.file.suffix.lower() == '.txt':
+                segments = parse_youtube_text(args.file.read_text(encoding='utf-8-sig'))
             else:
-                raise Problem('IMPORT_REQUIRES_JSON_SRT_VTT_WITH_TIMESTAMPS')
+                raise Problem('IMPORT_REQUIRES_JSON_SRT_VTT_TXT_WITH_TIMESTAMPS')
             item = save_transcript(args.output_dir, {'video_id': video_id, 'segments': segments,
                                    'title': args.title, 'channel': args.channel,
                                    'captions_language': args.language, 'source': 'user_import'})

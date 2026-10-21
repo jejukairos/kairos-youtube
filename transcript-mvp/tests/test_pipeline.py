@@ -20,6 +20,7 @@ from kairos_transcripts.collector import (
     fetch_ytdlp,
     normalize_transcript,
     parse_subtitle,
+    parse_youtube_text,
     save_transcript,
 )
 from kairos_transcripts.common import Problem, read_json
@@ -58,6 +59,15 @@ def summary(item=None):
 
 
 class CollectorTests(unittest.TestCase):
+    def test_timestamped_copied_script_preserves_all_text_and_real_times(self):
+        rows = parse_youtube_text('[0:00] 첫 문장\n이어지는 문장\n0:08\n둘째 문장\n[1:02:03] 마지막 문장')
+        self.assertEqual([x['start'] for x in rows], [0, 8, 3723])
+        self.assertEqual(rows[0]['text'], '첫 문장 이어지는 문장')
+        self.assertEqual(rows[-1]['text'], '마지막 문장')
+        for invalid in ['제목\n[0:00] 본문', '[0:61] 본문', '[0:08] 본문\n[0:00] 역순', '[0:00]\n[0:08] 누락']:
+            with self.assertRaises(Problem):
+                parse_youtube_text(invalid)
+
     def test_url_normalization_and_dedup(self):
         urls = [f'https://youtu.be/{VID}?si=ignored', f'https://youtube.com/watch?v={VID}',
                 f'https://www.youtube.com/shorts/{VID}', VID, '# comment', 'not-a-url',
@@ -284,6 +294,27 @@ class TelegramTests(unittest.TestCase):
         self.assertEqual(retry_part['text'], self.bundle['parts'][0]['text'])
         self.assertEqual(self.outbox.deliver(self.bundle, client, preview_fallback=True)['status'], 'ALREADY_SENT')
         self.assertEqual(client.send.call_count, 3)
+
+    def test_preview_cooldown_prevents_first_failure_on_next_video_and_expires(self):
+        from kairos_transcripts.telegram import notice_bundle
+        first = notice_bundle('preview-a', 'https://www.youtube.com/watch?v=' + VID,
+                              preview_video_id=VID)
+        second = notice_bundle('preview-b', 'https://www.youtube.com/watch?v=' + VID,
+                               preview_video_id=VID)
+        third = notice_bundle('preview-c', 'https://www.youtube.com/watch?v=' + VID,
+                              preview_video_id=VID)
+        client = self.client([{'status': 'RETRY', 'retry_at': 1008,
+                               'reason': 'TELEGRAM_RATE_LIMITED'}])
+        with patch('kairos_transcripts.telegram.time.time', return_value=1000):
+            self.outbox.deliver(first, client, preview_fallback=True)
+        with patch('kairos_transcripts.telegram.time.time', return_value=1061):
+            client.send.side_effect = [{'status': 'SENT', 'message_id': 1}]
+            self.assertEqual(self.outbox.deliver(second, client, preview_fallback=True)['status'], 'SENT')
+            self.assertFalse(client.send.call_args.args[0]['preview'])
+        with patch('kairos_transcripts.telegram.time.time', return_value=4601):
+            client.send.side_effect = [{'status': 'SENT', 'message_id': 2}]
+            self.outbox.deliver(third, client, preview_fallback=True)
+            self.assertTrue(client.send.call_args.args[0]['preview'])
 
     def test_modified_bundle_rejected_before_network(self):
         client = self.client([])

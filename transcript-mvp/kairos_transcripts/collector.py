@@ -201,6 +201,38 @@ def parse_subtitle(text, extension):
     return result
 
 
+def parse_youtube_text(text):
+    """Import a complete copied transcript with real YouTube timestamps.
+
+    Accept [0:08] text or a timestamp on its own line. Reject unlabeled
+    leading text and empty cues rather than silently discarding source content.
+    """
+    cue = re.compile(r'^\[?((?:\d+:)?\d{1,2}:\d{2})\]?\s*(.*)$')
+    rows = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        match = cue.fullmatch(line)
+        if match:
+            fields = [int(x) for x in match[1].split(':')]
+            if fields[-1] >= 60 or (len(fields) == 3 and fields[-2] >= 60):
+                raise Problem('INVALID_TRANSCRIPT_TIMESTAMP')
+            start = sum(v * (60 ** i) for i, v in enumerate(reversed(fields)))
+            if rows and (not rows[-1]['text'] or start < rows[-1]['start']):
+                raise Problem('INVALID_TRANSCRIPT_ORDER_OR_EMPTY_CUE')
+            rows.append({'start': start, 'duration': 0, 'text': match[2]})
+        elif rows:
+            rows[-1]['text'] = (rows[-1]['text'] + ' ' + line).strip()
+        else:
+            raise Problem('TRANSCRIPT_TIMESTAMPS_REQUIRED')
+    if not rows or not rows[-1]['text']:
+        raise Problem('EMPTY_TRANSCRIPT')
+    for previous, following in pairwise(rows):
+        previous['duration'] = following['start'] - previous['start']
+    return rows
+
+
 def fetch_ytdlp(video_id):
     # Python API does not read CLI config files; no cookies, login, proxy or media download.
     try:

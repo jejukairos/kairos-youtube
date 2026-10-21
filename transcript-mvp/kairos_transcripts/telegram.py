@@ -184,6 +184,8 @@ class Outbox:
                         'target_hash TEXT NOT NULL, parts TEXT NOT NULL)')
         self.db.execute('CREATE TABLE IF NOT EXISTS chat_limits ('
                         'target_hash TEXT PRIMARY KEY,retry_at REAL,failure_count INTEGER DEFAULT 0)')
+        self.db.execute('CREATE TABLE IF NOT EXISTS preview_limits ('
+                        'target_hash TEXT PRIMARY KEY,retry_at REAL)')
         self.db.commit()
         self.checkpoint = checkpoint
 
@@ -243,8 +245,11 @@ class Outbox:
                 return {'status': 'WAITING_RETRY', 'video_id': video_id, 'retry_at': shared_retry}
             # Retry only a definitively rejected preview after the shared pause.
             # Keep the reviewed text/hash unchanged; only Telegram's rendering option differs.
+            preview_limit = self.db.execute('SELECT retry_at FROM preview_limits WHERE target_hash=?',
+                                             (client.target_hash,)).fetchone()
+            preview_paused = preview_limit and preview_limit[0] > time.time()
             without_preview = bool(preview_fallback and part.get('preview') and
-                                   (state.get('preview_disabled_after_rate_limit') or
+                                   (preview_paused or state.get('preview_disabled_after_rate_limit') or
                                     (state['status'] == 'RETRY' and
                                      state.get('reason') == 'TELEGRAM_RATE_LIMITED')))
             send_part = dict(part)
@@ -265,6 +270,13 @@ class Outbox:
             if without_preview:
                 result = dict(result, preview_disabled_after_rate_limit=True)
             self.db.execute('BEGIN IMMEDIATE')
+            if preview_fallback and part.get('preview') and (
+                    (result['status'] == 'RETRY' and result.get('reason') == 'TELEGRAM_RATE_LIMITED')
+                    or (without_preview and not preview_paused)):
+                # An unhealthy preview must not make every new video fail once.
+                # This is a local rendering cooldown, not a Telegram unblock ETA.
+                self.db.execute('INSERT OR REPLACE INTO preview_limits VALUES (?,?)',
+                                (client.target_hash, time.time() + 3600))
             if result['status'] == 'RETRY':
                 previous = self.db.execute('SELECT failure_count FROM chat_limits WHERE target_hash=?',
                                            (client.target_hash,)).fetchone()

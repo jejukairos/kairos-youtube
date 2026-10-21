@@ -93,6 +93,18 @@ class AllSelectedTests(unittest.TestCase):
         self.assertEqual(len(set(seen)), 40)
         self.assertEqual(len(seen), 40)
 
+    def test_imported_caption_is_usable_during_video_and_source_cooldown(self):
+        self.app.policy['delivery_policy'] = 'all_selected'
+        self.app.add(self.item(), 'CAPTION_WAIT')
+        self.app.db.execute('UPDATE videos SET retry_at=99999999999')
+        self.app.db.execute("INSERT INTO meta VALUES ('caption_source_retry_at','99999999999')")
+        self.app.db.commit()
+        save_json(self.root/'transcripts'/f'{fixture.VID}.json', transcript())
+        with patch('kairos_transcripts.collector.fetch_one') as network:
+            self.assertEqual(self.app.collect(fixture.VID)['status'], 'CACHED')
+            network.assert_not_called()
+        self.assertEqual(self.app.db.execute('SELECT status FROM videos').fetchone()[0], 'CAPTIONS_READY')
+
     def test_window_progress_reconciles_sent_and_waiting(self):
         for i in range(40):
             self.app.add(self.item(f'v{i:010d}'), 'SENT' if i<11 else 'PENDING')
@@ -129,3 +141,21 @@ class AllSelectedTests(unittest.TestCase):
             with self.assertRaisesRegex(Problem,'TELEGRAM_SOURCE_COOLDOWN'):
                 self.app.dispatch(fixture.VID)
             external.assert_not_called()
+
+    def test_delivery_guard_blocks_other_video_and_notice_jobs(self):
+        self.app.add(self.item(), 'DISPATCHED')
+        self.app.add(self.item('n6nO1MkYId0'), 'READY')
+        self.app.db.commit()
+        with patch('kairos_transcripts.monitor.subprocess.run') as external:
+            with self.assertRaisesRegex(Problem, 'DELIVERY_ALREADY_IN_PROGRESS'):
+                self.app.dispatch('n6nO1MkYId0')
+            with self.assertRaisesRegex(Problem, 'DELIVERY_ALREADY_IN_PROGRESS'):
+                self.app.notice('guard-test', 'notice')
+            external.assert_not_called()
+
+    def test_delivery_guard_checks_remote_notice_jobs(self):
+        self.app.policy['require_remote_delivery_idle_before_dispatch'] = True
+        with patch('kairos_transcripts.monitor.gh_json', return_value={
+                'workflow_runs': [{'status': 'queued'}]}):
+            with self.assertRaisesRegex(Problem, 'REMOTE_DELIVERY_ALREADY_IN_PROGRESS'):
+                self.app.require_idle_delivery()

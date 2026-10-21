@@ -272,11 +272,14 @@ class Monitor:
         observed = {}
         old_pause = self.db.execute("SELECT value FROM meta WHERE key='telegram_source_retry_at'").fetchone()
         telegram_pause = float(old_pause['value']) if old_pause else 0
+        preview_pause = 0
         if raw:
             path = self.root / 'state/remote-delivery-snapshot.sqlite3'
             path.write_bytes(raw)
             remote = sqlite3.connect(path)
             try:
+                if remote.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='preview_limits'").fetchone():
+                    preview_pause = remote.execute('SELECT COALESCE(MAX(retry_at),0) FROM preview_limits').fetchone()[0]
                 if remote.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='chat_limits'").fetchone():
                     telegram_pause = max(telegram_pause, remote.execute('SELECT COALESCE(MAX(retry_at),0) FROM chat_limits').fetchone()[0])
                 for video_id, encoded in remote.execute('SELECT video_id,parts FROM deliveries'):
@@ -329,6 +332,10 @@ class Monitor:
             self.db.execute("INSERT OR REPLACE INTO meta VALUES ('telegram_source_retry_at',?)", (str(telegram_pause),))
         else:
             self.db.execute("DELETE FROM meta WHERE key='telegram_source_retry_at'")
+        if preview_pause > time.time():
+            self.db.execute("INSERT OR REPLACE INTO meta VALUES ('telegram_preview_retry_at',?)", (str(preview_pause),))
+        else:
+            self.db.execute("DELETE FROM meta WHERE key='telegram_preview_retry_at'")
         self.db.commit()
         self.reconcile_selection()
         return {'status': 'SYNCED', 'records_checked': changed}
@@ -436,6 +443,10 @@ class Monitor:
         telegram = self.db.execute("SELECT value FROM meta WHERE key='telegram_source_retry_at'").fetchone()
         if telegram and float(telegram['value']) > time.time():
             result['telegram_source_resume_at_utc'] = datetime.fromtimestamp(float(telegram['value']), UTC).isoformat()
+        preview = self.db.execute("SELECT value FROM meta WHERE key='telegram_preview_retry_at'").fetchone()
+        if preview and float(preview['value']) > time.time():
+            result['telegram_preview_resume_at_utc'] = datetime.fromtimestamp(float(preview['value']), UTC).isoformat()
+            result['telegram_preview_mode'] = 'temporarily_disabled_after_rate_limit'
         plan = self.backlog_status()
         if plan:
             result['backlog_plan'] = plan
@@ -569,7 +580,8 @@ class Monitor:
                                         'DELIVERY_UNCERTAIN', 'DELIVERY_REJECTED'):
             raise Problem('VIDEO_NOT_AVAILABLE_FOR_COLLECTION')
         self.require_selected(row)
-        if row['retry_at'] > time.time():
+        cached = (self.root / 'transcripts' / f'{video_id}.json').is_file()
+        if row['retry_at'] > time.time() and not cached:
             raise Problem('VIDEO_WAITING_RETRY')
         video_limit, character_limit = self.collection_limits(video_id)
         pause = self.db.execute("SELECT value FROM meta WHERE key='caption_source_retry_at'").fetchone()
@@ -649,6 +661,7 @@ class Monitor:
         telegram = self.db.execute("SELECT value FROM meta WHERE key='telegram_source_retry_at'").fetchone()
         if telegram and float(telegram['value']) > time.time():
             raise Problem('TELEGRAM_SOURCE_COOLDOWN')
+        self.require_idle_delivery()
         if self.policy.get('require_channel_audit_before_dispatch'):
             audit = self.audit()
             if audit['channels_checked'] != audit['channels_expected']:
@@ -684,6 +697,7 @@ class Monitor:
         pause = self.db.execute("SELECT value FROM meta WHERE key='telegram_source_retry_at'").fetchone()
         if pause and float(pause['value']) > time.time():
             return {'status': 'NOTICE_WAITING_TELEGRAM', 'notice_key': key, 'retry_at': float(pause['value'])}
+        self.require_idle_delivery()
         bundle = notice_bundle(key, message, photo_video_id, preview_video_id)
         request_id = uuid.uuid4().hex
         inputs = {'bundle': base64.b64encode(json.dumps(bundle, ensure_ascii=False).encode()).decode(),
@@ -696,3 +710,13 @@ class Monitor:
         self.db.execute('INSERT INTO meta VALUES (?,?)', (record, request_id))
         self.db.commit()
         return {'status': 'NOTICE_REQUESTED', 'notice_key': key, 'request_id': request_id}
+
+    def require_idle_delivery(self):
+        if self.db.execute("SELECT 1 FROM videos WHERE status IN "
+                           "('DISPATCHED','DISPATCH_UNCERTAIN') LIMIT 1").fetchone():
+            raise Problem('DELIVERY_ALREADY_IN_PROGRESS_SYNC_FIRST')
+        if self.policy.get('require_remote_delivery_idle_before_dispatch'):
+            runs = gh_json(self.policy['repository'],
+                           'actions/workflows/transcript-delivery.yml/runs?per_page=20')['workflow_runs']
+            if any(run.get('status') != 'completed' for run in runs):
+                raise Problem('REMOTE_DELIVERY_ALREADY_IN_PROGRESS')
