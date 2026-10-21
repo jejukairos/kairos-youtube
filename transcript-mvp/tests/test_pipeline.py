@@ -305,8 +305,25 @@ class TelegramTests(unittest.TestCase):
         client = Telegram(token='123:' + 'x' * 25, chat_id='12345', session=session)
         result = client.send({'text': '검증용', 'preview': False})
         self.assertEqual(result['status'], 'RETRY')
+        self.assertEqual(result['provider_retry_after_seconds'], 30)
+        self.assertEqual(result['retry_after_source'], 'provider')
+        self.assertEqual(result['http_status'], 429)
         self.assertFalse(session.post.call_args.kwargs['allow_redirects'])
         self.assertEqual(session.post.call_args.kwargs['json']['chat_id'], '12345')
+
+    def test_rate_limit_default_is_not_reported_as_provider_wait(self):
+        session = Mock()
+        session.post.return_value = Mock(status_code=429)
+        session.post.return_value.json.return_value = {
+            'ok': False, 'error_code': 429,
+            'description': 'untrusted text with 123:' + 'x' * 25,
+        }
+        client = Telegram(token='123:' + 'x' * 25, chat_id='12345', session=session)
+        result = client.send({'text': '검증용', 'preview': False})
+        self.assertEqual(result['status'], 'RETRY')
+        self.assertIsNone(result['provider_retry_after_seconds'])
+        self.assertEqual(result['retry_after_source'], 'local_default')
+        self.assertNotIn(client.token, json.dumps(result))
 
     def test_env_loading_is_literal_and_not_executable(self):
         with patch.dict(os.environ, {}, clear=True):

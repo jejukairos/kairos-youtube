@@ -157,10 +157,15 @@ class Telegram:
             code = body.get('error_code', response.status_code) if isinstance(body, dict) else response.status_code
             if code == 429:
                 wait = body.get('parameters', {}).get('retry_after', 60)
+                supplied_wait = type(wait) is int and wait >= 1 and 'retry_after' in body.get('parameters', {})
                 if type(wait) is not int or wait < 1:
                     wait = 60
                 return {'status': 'RETRY', 'retry_at': time.time() + wait,
-                        'reason': 'TELEGRAM_RATE_LIMITED'}
+                        'reason': 'TELEGRAM_RATE_LIMITED',
+                        'http_status': response.status_code,
+                        'provider_error_code': code,
+                        'provider_retry_after_seconds': wait if supplied_wait else None,
+                        'retry_after_source': 'provider' if supplied_wait else 'local_default'}
             if code in (400, 401, 403, 404):
                 return {'status': 'REJECTED', 'reason': f'TELEGRAM_HTTP_{code}'}
         except (requests.RequestException, ValueError, TypeError, AttributeError):
