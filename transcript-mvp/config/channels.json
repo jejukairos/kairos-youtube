@@ -227,6 +227,13 @@
       "name": "탁튜브 김탁",
       "priority": 50,
       "initial_since": "2026-10-21T03:40:40+00:00"
+    },
+    {
+      "channel_id": "UCRCNBeNS8MrOwFV6h6Yjemw",
+      "url": "https://www.youtube.com/@blueoak1004",
+      "name": "시황맨TV",
+      "priority": 50,
+      "initial_since": "2026-10-21T07:50:35+00:00"
     }
   ],
   "excluded_channel_ids": [
