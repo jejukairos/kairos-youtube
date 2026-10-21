@@ -220,6 +220,13 @@
       "initial_since": "2026-10-21T03:36:01+00:00",
       "content_regex": "윤\\s*지\\s*호|윤쎈",
       "series_note": "제목 또는 공개 설명란에서 윤지호/윤쎈이 확인되는 관련 영상만."
+    },
+    {
+      "channel_id": "UCpDKNykCqVBBtEYZZqht4YA",
+      "url": "https://www.youtube.com/channel/UCpDKNykCqVBBtEYZZqht4YA",
+      "name": "탁튜브 김탁",
+      "priority": 50,
+      "initial_since": "2026-10-21T03:40:40+00:00"
     }
   ],
   "excluded_channel_ids": [
