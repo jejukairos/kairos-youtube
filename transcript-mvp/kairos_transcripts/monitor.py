@@ -41,7 +41,7 @@ def instant(value):
 def boundary(stamp):
     # KST is UTC+09 without DST; do not depend on optional Windows tzdata.
     local = stamp.astimezone(timezone(timedelta(hours=9)))
-    slots = [(11, 30), (15, 0), (20, 0), (23, 0)]
+    slots = [(11, 0), (16, 0), (21, 0)]
     times = [local.replace(hour=h, minute=m, second=0, microsecond=0) for h, m in slots]
     previous = [t for t in times if t <= local]
     return (max(previous) if previous else times[-1] - timedelta(days=1)).astimezone(UTC)

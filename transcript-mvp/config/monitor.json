@@ -2,10 +2,9 @@
   "enabled": true,
   "timezone": "Asia/Seoul",
   "schedule": [
-    "11:30",
-    "15:00",
-    "20:00",
-    "23:00"
+    "11:00",
+    "16:00",
+    "21:00"
   ],
   "initial_since": "2026-10-20T02:30:00+00:00",
   "max_videos_per_run": 8,
