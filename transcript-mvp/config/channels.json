@@ -61,12 +61,6 @@
       "priority": 50
     },
     {
-      "channel_id": "UCKR3cXHN4kCRbD9Eaa-ROpQ",
-      "url": "https://www.youtube.com/@turbo832tv",
-      "name": "Turbo832 TV",
-      "priority": 50
-    },
-    {
       "channel_id": "UCamX91KxAzdicrLY6JPXjrw",
       "url": "https://www.youtube.com/@3.3campus",
       "name": "삼쩜삼캠퍼스",
@@ -248,6 +242,7 @@
     "UCsJ6RuBiTVWRX156FVbeaGg",
     "UC2GRwEADsEKEX5k-Xg9YphA",
     "UCfnqgWlC5IvJEAPTmyjaixA",
-    "UCONUFWDbb9Y338NVLGQid3Q"
+    "UCONUFWDbb9Y338NVLGQid3Q",
+    "UCKR3cXHN4kCRbD9Eaa-ROpQ"
   ]
 }
