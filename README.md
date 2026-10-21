@@ -1,8 +1,8 @@
 # Kairos YouTube Intelligence v4.3
 
-## Current operation: paused (2026-10-20)
+## Current operation: Codex transcripts active; Google automation paused (2026-10-21)
 
-The user paused this automation and chose to provide video transcripts in the conversation for manual summaries. YouTube collection, Gemini API analysis, scheduled Telegram briefings, and watchdog notifications are stopped. The GitHub repository variable `KAIROS_ENABLED` is `false`, and all nine workflows are `disabled_manually`. No workflow was running when suspension was verified. Existing source files, pending videos, delivery records, and stored secrets are preserved; this change does not revoke provider API keys. Resume only on a new user request. A separate manual-only transcript summary delivery workflow was added on 2026-10-20; it makes no YouTube or AI calls and does not resume any schedule. See [the transcript MVP](transcript-mvp/QUICKSTART.md). The implementation and validation details below describe the retained previous setup, not an active service.
+The user enabled four local Codex chat schedules at 11:30, 15:00, 20:00 and 23:00 KST. The 32-channel public-feed monitor collects free captions and the chat model summarizes them. Telegram delivery uses the existing manual-only workflow and fixed recipient. No YouTube Data API, Gemini API or separate OpenAI API is used. The computer and Codex app must remain available. The old nine Google/video workflows remain disabled and KAIROS_ENABLED remains false. See [the current transcript workflow](transcript-mvp/QUICKSTART.md) and [actual verification](transcript-mvp/docs/VALIDATION.md). The older implementation below is retained as inactive history.
 
 기존 뉴스용 `kairos` 및 다른 수집 프로젝트와 독립된 프로그램입니다. 이 폴더의 **내용을 전용 GitHub 저장소의 루트에 배포**해야 `.github/workflows`가 작동합니다. 상위 작업 폴더 전체를 업로드하지 마세요.
 

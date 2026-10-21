@@ -30,6 +30,8 @@ PENDING = ('PENDING', 'CAPTIONS_READY', 'CAPTION_WAIT', 'READY', 'DISPATCHED', '
 
 
 def instant(value):
+    if value.endswith('Z'):
+        value = value[:-1] + '+00:00'
     stamp = datetime.fromisoformat(value)
     if stamp.tzinfo is None:
         raise Problem('TIMEZONE_REQUIRED')
@@ -161,6 +163,10 @@ class Monitor:
         if 'processed_at' not in columns:
             self.db.execute('ALTER TABLE channels ADD COLUMN processed_at TEXT')
             self.db.commit()
+        for channel in self.channels:
+            self.db.execute("UPDATE videos SET channel=? WHERE channel_id=? AND channel=''",
+                            (channel['name'], channel['channel_id']))
+        self.db.commit()
 
     def close(self):
         self.db.close()
@@ -190,6 +196,7 @@ class Monitor:
         raw = remote_file(self.policy['repository'], 'transcript_delivery.sqlite3',
                           self.policy['state_branch'], optional=True)
         changed = 0
+        observed = {}
         if raw:
             path = self.root / 'state/remote-delivery-snapshot.sqlite3'
             path.write_bytes(raw)
@@ -211,6 +218,7 @@ class Monitor:
                         status, reason, retry = 'DELIVERY_REJECTED', 'CHECK_BOT_CONFIGURATION', 0
                     else:
                         continue
+                    observed[video_id] = status
                     # An in-flight remote checkpoint is not a failed delivery; leave dispatched work alone.
                     row = self.db.execute('SELECT status FROM videos WHERE video_id=?', (video_id,)).fetchone()
                     if status == 'DELIVERY_UNCERTAIN' and row and row['status'] == 'DISPATCHED':
@@ -231,8 +239,12 @@ class Monitor:
                 if match['status'] == 'completed':
                     # Re-read the remote snapshot after a later sync to distinguish accepted/uncertain/rejected.
                     # A successful job with a legacy duplicate is already covered by the import above.
-                    self.db.execute("UPDATE videos SET status='READY',reason='REMOTE_RUN_FINISHED_RECHECK_STATE',retry_at=? WHERE video_id=?",
-                                    (time.time() + 60, row['video_id']))
+                    if observed.get(row['video_id']) == 'DELIVERY_UNCERTAIN':
+                        self.db.execute("UPDATE videos SET status='DELIVERY_UNCERTAIN',reason='CHECK_TELEGRAM_BEFORE_RETRY' WHERE video_id=?",
+                                        (row['video_id'],))
+                    else:
+                        self.db.execute("UPDATE videos SET status='READY',reason='REMOTE_RUN_FINISHED_RECHECK_STATE',retry_at=? WHERE video_id=?",
+                                        (time.time() + 60, row['video_id']))
         self.db.commit()
         return {'status': 'SYNCED', 'records_checked': changed}
 
@@ -321,9 +333,8 @@ class Monitor:
                     before = self.db.total_changes
                     self.add(dict(item, channel=channel['name'], priority=channel.get('priority',50)))
                     added += self.db.total_changes - before
-                if older >= 10:
-                    reached_old = True
-            if reached_old:
+            if older >= 10:
+                reached_old = True
                 break
         complete = reached_old and not failures
         self.db.execute('UPDATE channels SET gap=?,cursor=CASE WHEN ? THEN ? ELSE cursor END,last_error=? WHERE channel_id=?',

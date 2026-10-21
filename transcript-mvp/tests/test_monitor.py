@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -92,6 +93,27 @@ class MonitorTests(unittest.TestCase):
             with self.assertRaisesRegex(Problem,'NOT_AVAILABLE'):
                 self.app.collect(VID)
             collect.assert_not_called()
+
+    def test_sent_video_cannot_be_revived_by_review(self):
+        self.app.add(self.item(),'SENT'); self.app.db.commit()
+        with self.assertRaisesRegex(Problem,'NOT_AVAILABLE_FOR_REVIEW'):
+            self.app.review(VID,self.root/'missing-draft.json')
+
+    def test_completed_remote_run_with_sending_checkpoint_is_uncertain(self):
+        import sqlite3
+        remote_path=self.root/'remote.sqlite3'
+        remote=sqlite3.connect(remote_path)
+        remote.execute('CREATE TABLE deliveries(video_id TEXT,parts TEXT)')
+        remote.execute('INSERT INTO deliveries VALUES (?,?)',(VID,json.dumps([{'status':'SENDING'}])))
+        remote.commit();remote.close()
+        self.app.add(self.item(),'DISPATCHED')
+        self.app.db.execute('UPDATE videos SET request_id=? WHERE video_id=?',('request-unique',VID))
+        self.app.db.commit()
+        with (patch('kairos_transcripts.monitor.remote_file',return_value=remote_path.read_bytes()),
+              patch('kairos_transcripts.monitor.gh_json',return_value={'workflow_runs':[
+                  {'id':1,'display_title':'Transcript delivery request-unique','status':'completed'}]})):
+            self.app.sync()
+        self.assertEqual(self.app.db.execute('SELECT status FROM videos').fetchone()[0],'DELIVERY_UNCERTAIN')
 
     def test_request_tracking_is_saved_before_dispatch_and_uncertain_is_not_repeated(self):
         self.app.add(self.item(),'READY'); self.app.db.commit()

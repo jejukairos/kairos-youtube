@@ -1,0 +1,33 @@
+{
+  "registered_at_utc": "2026-10-21T00:46:53.789176+00:00",
+  "timezone": "Asia/Seoul",
+  "times": [
+    "11:30",
+    "15:00",
+    "20:00",
+    "23:00"
+  ],
+  "automations": [
+    {
+      "id": "11-30",
+      "name": "유튜브 자막 요약 · 오전 11:30",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "automation",
+      "name": "유튜브 자막 요약 · 오후·저녁",
+      "status": "ACTIVE"
+    }
+  ],
+  "scheduled_trigger_observed": false,
+  "live_discovery_channels": 32,
+  "rss_errors": 0,
+  "rss_gap_recovered": 1,
+  "carryover": 71,
+  "new_and_recovered": 71,
+  "test_sent_video": "3umkxYdvHHE",
+  "test_sent_parts": 2,
+  "pending_after_test": 141,
+  "local_tests": 38,
+  "old_google_workflows_enabled": false
+}
