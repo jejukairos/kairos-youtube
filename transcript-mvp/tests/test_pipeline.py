@@ -155,7 +155,15 @@ class SummaryTests(unittest.TestCase):
         item, value = transcript(), summary()
         checked = validate_summary(value, item)
         self.assertFalse(checked['external_fact_check'])
-        self.assertIn('00:01:40', render_summary(value, item))
+        rendered = render_summary(value, item)
+        self.assertIn('▶️ 발표자는 다음 분기 성장률 20%를 전망했다.', rendered)
+        self.assertIn(item['url'], rendered)
+        self.assertNotIn('00:01:40', rendered)
+        self.assertNotIn('근거', rendered)
+        self.assertNotIn('[전망]', rendered)
+        self.assertNotIn('★', rendered)
+        self.assertNotIn('외부 사실 검증 없음', rendered)
+        self.assertEqual(checked['points'][1]['evidence'][0]['segment'], 1)
         item['segments'][0]['text'] += ' 수정'
         with self.assertRaisesRegex(Problem, 'SOURCE_MISMATCH'):
             validate_summary(value, item)

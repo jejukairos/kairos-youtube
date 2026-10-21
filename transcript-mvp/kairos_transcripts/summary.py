@@ -7,9 +7,6 @@ from .collector import normalize_transcript
 from .common import Problem, digest, now, timestamp
 
 KINDS = {'claim', 'number', 'company', 'outlook', 'condition', 'risk', 'check', 'time', 'interpretation'}
-LABELS = {'claim': '발언', 'number': '발언 속 수치', 'company': '기업', 'outlook': '전망',
-          'condition': '전제조건', 'risk': '위험·반론', 'check': '확인할 데이터',
-          'time': '영상 시점', 'interpretation': '요약자의 해석'}
 NUMBER = re.compile(r'\d+(?:,\d{3})*(?:\.\d+)?')
 
 
@@ -37,6 +34,9 @@ def evidence_packet(transcript):
         'kind: claim/number/company/outlook/condition/risk/check/time/interpretation.\n'
         'evidence: [{"segment": 0, "quote": "그 구간에 실제 있는 짧은 원문"}].\n'
         '독립적인 근거 구간을 최소 3개 사용하고, 모든 문단에 근거를 붙이세요.\n'
+        '근거와 시간·분류·중요도는 내부 검토용 JSON에만 보존하며 발송 본문에는 표시하지 않습니다.\n'
+        'text는 숫자·원인·전망 조건을 담은 짧고 매끄러운 투자 브리핑으로 작성하세요. '
+        '분류 꼬리표나 시간 인용을 넣지 말고, 주장·추정은 화자의 판단임이 자연스럽게 드러나게 쓰세요.\n'
         '주장·전망은 발언자에게 귀속시키고, 해석은 interpretation으로 분리하세요.\n'
         '하워드 막스 관점의 해석은 가격에 반영된 기대·반대 시나리오·손실 위험을 검토하되, '
         '그가 직접 발언했거나 특정 종목을 추천한 것처럼 쓰지 마세요.\n'
@@ -110,16 +110,12 @@ def validate_summary(value, transcript):
 
 def render_summary(value, transcript):
     value = validate_summary(value, transcript)
-    item = normalize_transcript(transcript)
-    lines = [f"📊 {value['title']}", f"📺 {value['channel']}",
-             '자막 기반 요약 · 아래 수치는 영상의 발언이며 외부 검증 결과가 아닙니다.']
+    # Evidence, source caveats and importance remain in the reviewed JSON.
+    # The reader sees a clean briefing; the separate URL card names the channel.
+    lines = [f"📊 {value['title']}"]
     for point in value['points']:
-        starts = sorted({int(item['segments'][ref['segment']]['start']) for ref in point['evidence']})
-        times = ', '.join(timestamp(t) for t in starts)
-        lines.append(f"▶️ [{LABELS[point['kind']]}] {point['text']} (근거 {times})")
-    lines.extend([f"★ 중요도 {value['importance']}/5 — {value['importance_reason']}",
-                  value.get('source_limitations') or '자막 인식 오류·화면 정보 누락 가능.',
-                  f"🔗 {value['url']}"])
+        lines.append(f"▶️ {point['text']}")
+    lines.append(f"🔗 {value['url']}")
     return '\n\n'.join(lines)
 
 
