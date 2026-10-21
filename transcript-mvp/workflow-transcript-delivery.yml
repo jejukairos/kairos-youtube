@@ -1,10 +1,15 @@
 name: Transcript summary delivery (manual, no AI)
+run-name: Transcript delivery ${{ inputs.request_id || 'manual' }}
 on:
   workflow_dispatch:
     inputs:
       bundle:
         description: Locally reviewed delivery bundle (base64 JSON); never an API key
         required: true
+        type: string
+      request_id:
+        description: Non-secret request identifier for deduplication and run tracking
+        required: false
         type: string
 permissions:
   contents: write

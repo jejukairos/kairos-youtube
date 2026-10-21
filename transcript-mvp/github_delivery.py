@@ -72,7 +72,7 @@ def main():
     except (ValueError, TypeError):
         raise Problem('INVALID_DELIVERY_INPUT') from None
     remote = RemoteState(os.environ['GITHUB_REPOSITORY'], Path('state/manual-delivery.sqlite3'))
-    if remote.legacy_sent(bundle['video_id']):
+    if bundle.get('kind') != 'notice' and remote.legacy_sent(bundle['video_id']):
         print(json.dumps({'status': 'ALREADY_SENT_LEGACY', 'video_id': bundle['video_id']}))
         return 0
     remote.restore()

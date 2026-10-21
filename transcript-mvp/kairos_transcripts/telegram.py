@@ -47,17 +47,21 @@ def load_env(path=Path('.env')):
 def validate_bundle(bundle):
     if not isinstance(bundle, dict) or bundle.get('schema') != 1:
         raise Problem('INVALID_DELIVERY_BUNDLE')
-    if bundle.get('url') != canonical(bundle.get('video_id', '')):
+    notice = bundle.get('kind') == 'notice'
+    if notice:
+        if not re.fullmatch(r'notice:[A-Za-z0-9:._-]{1,110}', bundle.get('video_id', '')):
+            raise Problem('INVALID_NOTICE_KEY')
+    elif bundle.get('url') != canonical(bundle.get('video_id', '')):
         raise Problem('INVALID_DELIVERY_URL')
     if bundle.get('bundle_hash') != digest({k: v for k, v in bundle.items() if k != 'bundle_hash'}):
         raise Problem('DELIVERY_BUNDLE_CHANGED')
-    if type(bundle.get('importance')) is not int or not 3 <= bundle['importance'] <= 5:
+    if not notice and (type(bundle.get('importance')) is not int or not 3 <= bundle['importance'] <= 5):
         raise Problem('FILTERED_LOW_IMPORTANCE')
-    for key in ('transcript_hash', 'validated_summary_hash'):
+    for key in (() if notice else ('transcript_hash', 'validated_summary_hash')):
         if not re.fullmatch(r'[a-f0-9]{64}', bundle.get(key, '')):
             raise Problem('INVALID_DELIVERY_HASH')
     parts = bundle.get('parts')
-    if not isinstance(parts, list) or not 2 <= len(parts) <= 20:
+    if not isinstance(parts, list) or not (1 if notice else 2) <= len(parts) <= 20:
         raise Problem('INVALID_DELIVERY_PARTS')
     for part in parts:
         if (not isinstance(part, dict) or not isinstance(part.get('text'), str)
@@ -65,6 +69,13 @@ def validate_bundle(bundle):
                 or type(part.get('preview')) is not bool):
             raise Problem('INVALID_DELIVERY_PART')
     return bundle
+
+
+def notice_bundle(key, text):
+    value = {'schema': 1, 'kind': 'notice', 'video_id': 'notice:' + key,
+             'parts': [{'text': p, 'preview': False} for p in split_message(text)]}
+    value['bundle_hash'] = digest(value)
+    return validate_bundle(value)
 
 
 class Telegram:
