@@ -83,6 +83,7 @@ Windows Python: .venv/Scripts/python.exe
 6. PENDING/CAPTIONS_READY/CAPTION_WAIT 중 실행 가능한 영상에 `monitor.py collect VIDEO_ID`를 실행한다.
    all_selected에서는 회차 편수/본문 길이를 기준으로 임의 중단하지 않는다. 수집량 장부는 기록하되 실제 계정 한도를 매 영상 전에 확인하고 원문 전체를 읽는다. 한도가 소진되면 원문·대기 ID를 보존한다.
    자막 제공처가 IP_BLOCKED/RATE_LIMITED를 반환하면 컴퓨터 전체 수집을 6시간 보류한다.
+   6시간은 프로그램의 자체 재시도 간격이며 YouTube가 알려준 해제 시각이 아니다. 해제 예정 시간으로 안내하지 않는다.
    신규 영상의 자막 수집 시작 간격은 최소 20초다. CAPTION_REQUEST_SPACING이면 status의 caption_next_request_at_utc까지 기다린 뒤 같은 영상을 재개한다.
    이 간격은 YouTube가 보장한 허용량이 아니라 연속 요청을 줄이기 위한 자체 제한이다. 차단을 해제하거나 모든 영상 접근을 보장하지 않는다.
    status의 caption_source_resume_at_utc를 확인한다. CAPTION_SOURCE_COOLDOWN이면 다른 영상으로 반복 시도하지 않는다.
