@@ -180,4 +180,4 @@ RSS 설명란을 SQLite에 보존하고 기존 DB를 이력 손실 없이 마이
 
 새 요약의 첫 메시지를 사진 첨부(sendPhoto)에서 채널명·제목·원본 URL이 있는 sendMessage 링크 카드로 변경했다. 원본과 일치하는 preview_url을 지정하고 is_disabled=false, prefer_large_media=true, show_above_text=false로 큰 YouTube 미리보기를 본문 아래에 요청한다. 요약은 다음 메시지로 보내며 본문에 근거 시각/분류표를 붙이지 않는 기존 규칙을 유지한다. 과거 SENT와 이미 시작한 번들의 해시·사진 발송 이력은 바꾸지 않는다.
 
-다른 영상/호스트의 preview_url을 거부하고 기존 사진 번들의 재개 경로는 보존했다. 단위 테스트 63개 통과. 공식 LinkPreviewOptions 문서(https://core.telegram.org/bots/api#linkpreviewoptions)에 따라 요청하며 실제 썸네일·재생 버튼 모양은 Telegram 렌더링에 따른다. 실제 링크 카드 시험 결과는 후속 기록으로 구분한다.
+다른 영상/호스트의 preview_url을 거부하고 기존 사진 번들의 재개 경로는 보존했다. 단위 테스트 63개 통과. 공식 LinkPreviewOptions 문서(https://core.telegram.org/bots/api#linkpreviewoptions)에 따라 요청하며 실제 썸네일·재생 버튼 모양은 Telegram 렌더링에 따른다. 실제 링크 카드 시험: https://github.com/jejukairos/kairos-youtube/actions/runs/39555288287 실행이 성공했고 원격 outbox의 notice:20261021:youtube-preview-demo가 SENT/message_id 58임을 sync로 확인했다. 스크린샷의 3umkxYdvHHE 영상 카드 1개만 전송했으며 기존 요약을 다시 보내지 않았다. 휴대폰의 실제 재생 버튼 표시는 독립적으로 관측하지 않았다.
