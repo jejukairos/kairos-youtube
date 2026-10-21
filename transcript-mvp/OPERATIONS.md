@@ -44,6 +44,8 @@ Windows Python: .venv/Scripts/python.exe
    한 슬롯에 최대 8편, 원문 합계 120,000자라는 준비 예산이 코드에 적용된다. 초과한 원문·대기 ID는 보존한다.
    `RUN_*_BUDGET_REACHED`면 그 슬롯의 신규 요약을 종료하고 이월 건수를 알린다. 상한을 임의로 올리지 않는다.
    자막 제공처가 IP_BLOCKED/RATE_LIMITED를 반환하면 컴퓨터 전체 수집을 6시간 보류한다.
+   신규 영상의 자막 수집 시작 간격은 최소 20초다. CAPTION_REQUEST_SPACING이면 status의 caption_next_request_at_utc까지 기다린 뒤 같은 영상을 재개한다.
+   이 간격은 YouTube가 보장한 허용량이 아니라 연속 요청을 줄이기 위한 자체 제한이다. 차단을 해제하거나 모든 영상 접근을 보장하지 않는다.
    status의 caption_source_resume_at_utc를 확인한다. CAPTION_SOURCE_COOLDOWN이면 다른 영상으로 반복 시도하지 않는다.
    이미 로컬에 저장한 자막의 검토·발송과 공개 RSS 확인은 계속할 수 있다. 보류 중 유료 프록시·로그인 쿠키·다른 경로로 우회하지 않는다.
 7. transcripts/VIDEO_ID.json의 **전체 segments**를 읽는다. 필요하면 출력 범위를 나눠 모두 읽되, 누락한 부분을 본 것처럼 쓰지 않는다.

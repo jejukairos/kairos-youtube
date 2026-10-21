@@ -119,6 +119,24 @@ class MonitorTests(unittest.TestCase):
             self.assertEqual(self.app.collect(VID)['status'], 'CACHED')
             collect.assert_called_once()
 
+    def test_caption_requests_are_spaced_across_monitor_instances(self):
+        self.app.add(self.item()); self.app.add(self.item('n6nO1MkYId0')); self.app.db.commit()
+        other = Monitor(self.root)
+        try:
+            with patch('kairos_transcripts.monitor.time.time', return_value=1000):
+                with patch('kairos_transcripts.monitor.collect_batch', return_value=[{'status':'OK','characters':1}]) as collect:
+                    self.app.collect(VID)
+                    with self.assertRaisesRegex(Problem, 'CAPTION_REQUEST_SPACING'):
+                        other.collect('n6nO1MkYId0')
+                    self.assertEqual(collect.call_count, 1)
+                    self.assertEqual(other.db.execute('SELECT attempts FROM videos WHERE video_id=?',('n6nO1MkYId0',)).fetchone()[0], 0)
+            with patch('kairos_transcripts.monitor.time.time', return_value=1020):
+                with patch('kairos_transcripts.monitor.collect_batch', return_value=[{'status':'OK','characters':1}]) as collect:
+                    other.collect('n6nO1MkYId0')
+                    collect.assert_called_once()
+        finally:
+            other.close()
+
     def test_sent_video_cannot_be_revived_by_review(self):
         self.app.add(self.item(),'SENT'); self.app.db.commit()
         with self.assertRaisesRegex(Problem,'NOT_AVAILABLE_FOR_REVIEW'):

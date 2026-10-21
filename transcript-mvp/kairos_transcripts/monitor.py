@@ -295,6 +295,9 @@ class Monitor:
         pause = self.db.execute("SELECT value FROM meta WHERE key='caption_source_retry_at'").fetchone()
         if pause and float(pause['value']) > time.time():
             result['caption_source_resume_at_utc'] = datetime.fromtimestamp(float(pause['value']), UTC).isoformat()
+        next_request = self.db.execute("SELECT value FROM meta WHERE key='caption_next_request_at'").fetchone()
+        if next_request and float(next_request['value']) > time.time():
+            result['caption_next_request_at_utc'] = datetime.fromtimestamp(float(next_request['value']), UTC).isoformat()
         return result
 
     def recover_gap(self, channel_id, entries=None, metadata=public_metadata):
@@ -371,6 +374,17 @@ class Monitor:
         used_chars = budget['characters'] if budget else 0
         if video_id not in used_ids and len(used_ids) >= self.policy['max_videos_per_run']:
             raise Problem('RUN_VIDEO_BUDGET_REACHED')
+        if not (self.root / 'transcripts' / f'{video_id}.json').is_file():
+            # Reserve a shared start time before network I/O; independent CLI
+            # processes must not create a burst of consecutive caption requests.
+            with self.db:
+                self.db.execute('BEGIN IMMEDIATE')
+                next_request = self.db.execute("SELECT value FROM meta WHERE key='caption_next_request_at'").fetchone()
+                if next_request and float(next_request['value']) > time.time():
+                    raise Problem('CAPTION_REQUEST_SPACING')
+                interval = max(20, float(self.policy.get('caption_request_interval_seconds', 20)))
+                self.db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES ('caption_next_request_at',?)",
+                                (str(time.time() + interval),))
         results = collect_batch([canonical(video_id)], self.root / 'transcripts', delay=0)
         result = results[0]
         if result['status'] in ('OK', 'CACHED'):

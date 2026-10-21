@@ -102,6 +102,8 @@ Telegram Bot API에 멱등 키가 없어 도착 불확실 메시지를 무조건
 
 자막·요약·상태·환경 파일은 기본 Git 제외입니다. 원문 자막을 외부에 재배포하지 않습니다.
 클라우드 공개 IP에서는 수집이 차단될 수 있어 무료·무중단·무제한 수집을 보장하지 않습니다.
+예약 감시의 신규 자막 요청은 시작 간격을 최소 20초로 유지합니다. 이 값은 자체 완화 설정이며 YouTube의 허용량 보장은 아닙니다.
+자막 접속 제한을 받으면 전체 신규 요청을 보류하고 기존 원문·대기 목록은 보존합니다. 대기 만료 후 정규 실행에서 다시 시도합니다.
 
 자료: [자막 라이브러리](https://github.com/jdepoix/youtube-transcript-api),
 [yt-dlp](https://github.com/yt-dlp/yt-dlp), [Telegram](https://core.telegram.org/bots/api#sendmessage),

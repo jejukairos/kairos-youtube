@@ -9,6 +9,7 @@
   "initial_since": "2026-10-20T02:30:00+00:00",
   "max_videos_per_run": 8,
   "max_transcript_characters_per_run": 120000,
+  "caption_request_interval_seconds": 20,
   "warning_pending_count": 10,
   "usage_warning_percent": 70,
   "usage_stop_percent": 90,
