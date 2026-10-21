@@ -267,6 +267,24 @@ class TelegramTests(unittest.TestCase):
         self.assertEqual(self.outbox.deliver(self.bundle, client)['status'], 'UNCERTAIN')
         self.assertEqual(client.send.call_count, 1)
 
+    def test_preview_fallback_respects_pause_and_keeps_text_and_sent_parts(self):
+        client = self.client([{'status': 'RETRY', 'retry_at': 1030,
+                               'reason': 'TELEGRAM_RATE_LIMITED'}])
+        with patch('kairos_transcripts.telegram.time.time', return_value=1000):
+            self.assertEqual(self.outbox.deliver(self.bundle, client, preview_fallback=True)['status'], 'RETRY')
+            self.assertTrue(client.send.call_args.args[0]['preview'])
+            self.assertEqual(self.outbox.deliver(self.bundle, client, preview_fallback=True)['status'], 'WAITING_RETRY')
+            self.assertEqual(client.send.call_count, 1)
+        with patch('kairos_transcripts.telegram.time.time', return_value=1061):
+            client.send.side_effect = [{'status': 'SENT', 'message_id': 1}, {'status': 'SENT', 'message_id': 2}]
+            self.assertEqual(self.outbox.deliver(self.bundle, client, preview_fallback=True)['status'], 'SENT')
+        retry_part = client.send.call_args_list[1].args[0]
+        self.assertFalse(retry_part['preview'])
+        self.assertNotIn('preview_url', retry_part)
+        self.assertEqual(retry_part['text'], self.bundle['parts'][0]['text'])
+        self.assertEqual(self.outbox.deliver(self.bundle, client, preview_fallback=True)['status'], 'ALREADY_SENT')
+        self.assertEqual(client.send.call_count, 3)
+
     def test_modified_bundle_rejected_before_network(self):
         client = self.client([])
         self.bundle['parts'][0]['text'] = 'changed'

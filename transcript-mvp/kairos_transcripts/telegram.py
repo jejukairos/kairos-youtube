@@ -190,7 +190,7 @@ class Outbox:
     def close(self):
         self.db.close()
 
-    def deliver(self, bundle, client):
+    def deliver(self, bundle, client, preview_fallback=False):
         bundle = validate_bundle(bundle)
         video_id = bundle['video_id']
         self.db.execute('BEGIN IMMEDIATE')
@@ -241,15 +241,29 @@ class Outbox:
                 if self.checkpoint:
                     self.checkpoint()
                 return {'status': 'WAITING_RETRY', 'video_id': video_id, 'retry_at': shared_retry}
+            # Retry only a definitively rejected preview after the shared pause.
+            # Keep the reviewed text/hash unchanged; only Telegram's rendering option differs.
+            without_preview = bool(preview_fallback and part.get('preview') and
+                                   (state.get('preview_disabled_after_rate_limit') or
+                                    (state['status'] == 'RETRY' and
+                                     state.get('reason') == 'TELEGRAM_RATE_LIMITED')))
+            send_part = dict(part)
+            if without_preview:
+                send_part['preview'] = False
+                send_part.pop('preview_url', None)
             parts[index] = {'status': 'SENDING'}
+            if without_preview:
+                parts[index]['preview_disabled_after_rate_limit'] = True
             self.db.execute('UPDATE deliveries SET parts=? WHERE video_id=?', (json.dumps(parts), video_id))
             self.db.commit()
             if self.checkpoint:
                 self.checkpoint()  # Must be durable before the external send.
             try:
-                result = client.send(part)
+                result = client.send(send_part)
             except Exception:  # noqa: BLE001 -- preserve uncertain delivery even for unexpected transport failures
                 result = {'status': 'UNCERTAIN', 'reason': 'CLIENT_FAILED_AFTER_SEND_STARTED'}
+            if without_preview:
+                result = dict(result, preview_disabled_after_rate_limit=True)
             self.db.execute('BEGIN IMMEDIATE')
             if result['status'] == 'RETRY':
                 previous = self.db.execute('SELECT failure_count FROM chat_limits WHERE target_hash=?',

@@ -78,7 +78,7 @@ def main():
     remote.restore()
     outbox = Outbox(remote.path, checkpoint=remote.save)
     try:
-        result = outbox.deliver(bundle, Telegram())
+        result = outbox.deliver(bundle, Telegram(), preview_fallback=True)
     finally:
         outbox.close()
     print(json.dumps(result))
