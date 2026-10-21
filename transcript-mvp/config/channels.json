@@ -234,6 +234,13 @@
       "name": "시황맨TV",
       "priority": 50,
       "initial_since": "2026-10-21T07:50:35+00:00"
+    },
+    {
+      "channel_id": "UCb55ivT0IMLtiAcVu3B-vKQ",
+      "url": "https://www.youtube.com/channel/UCb55ivT0IMLtiAcVu3B-vKQ",
+      "name": "Six Sigma | 식스시그마",
+      "priority": 50,
+      "initial_since": "2026-10-21T07:54:30+00:00"
     }
   ],
   "excluded_channel_ids": [
