@@ -6,6 +6,7 @@ import argparse
 import hmac
 import json
 import math
+import re
 import secrets
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -51,6 +52,9 @@ def save_browser_capture(root, value):
     for key in ('title', 'channel'):
         if not isinstance(value.get(key), str) or not value[key].strip() or len(value[key]) > 1000:
             raise Problem('BROWSER_VIDEO_METADATA_REQUIRED')
+    language = value.get('language', 'und')
+    if not isinstance(language, str) or not re.fullmatch(r'[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*', language):
+        raise Problem('INVALID_TRANSCRIPT_LANGUAGE')
     app = Monitor(root)
     try:
         row = app.db.execute('SELECT * FROM videos WHERE video_id=?', (vid,)).fetchone()
@@ -62,7 +66,7 @@ def save_browser_capture(root, value):
     finally:
         app.close()
     item = normalize_transcript(dict(video_id=vid, title=value['title'], channel=value['channel'],
-        channel_id=value['channel_id'], source='browser-visible-script', captions_language='ko',
+        channel_id=value['channel_id'], source='browser-visible-script', captions_language=language,
         captions_generated=None, segments=segments, source_capture={
             'dom_count':len(rows), 'display_duration_seconds':duration,
             'text_fnv1a_utf16':checksum, 'text_characters':len(raw),

@@ -25,6 +25,7 @@ class BrowserIntakeTests(unittest.TestCase):
         self.assertEqual(result['segments'], 3)
         item = read_json(self.root/'transcripts'/f'{fixture.VID}.json')
         self.assertEqual(item['segments'][-1]['start'], 18)
+        self.assertEqual(item['captions_language'], 'und')
         self.assertEqual(self.app.db.execute('SELECT status FROM videos').fetchone()[0], 'PENDING')
 
     def test_count_checksum_and_end_incompleteness_rejected(self):
@@ -53,3 +54,9 @@ class BrowserIntakeTests(unittest.TestCase):
     def test_unicode_checksum_matches_javascript_utf16(self):
         self.assertEqual(text_checksum('hello'), '4f9f2cab')
         self.assertNotEqual(text_checksum('📊'), text_checksum('📈'))
+
+    def test_caption_language_is_not_assumed_from_korean_video_title(self):
+        self.app.add(self.item()); self.app.db.commit()
+        value = self.payload();value['language']='en'
+        save_browser_capture(self.root, value)
+        self.assertEqual(read_json(self.root/'transcripts'/f'{fixture.VID}.json')['captions_language'], 'en')
