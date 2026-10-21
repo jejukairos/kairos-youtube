@@ -24,7 +24,8 @@ from .summary import (
 )
 from .telegram import notice_bundle, validate_bundle
 
-NS = {'a': 'http://www.w3.org/2005/Atom', 'yt': 'http://www.youtube.com/xml/schemas/2015'}
+NS = {'a': 'http://www.w3.org/2005/Atom', 'yt': 'http://www.youtube.com/xml/schemas/2015',
+      'media': 'http://search.yahoo.com/mrss/'}
 CID = re.compile(r'^UC[A-Za-z0-9_-]{22}$')
 PENDING = ('PENDING', 'CAPTIONS_READY', 'CAPTION_WAIT', 'READY', 'DISPATCHED', 'DISPATCH_UNCERTAIN')
 
@@ -66,6 +67,7 @@ def parse_feed(xml, channel):
             published = entry.findtext('a:published', namespaces=NS)
             videos.append({'video_id': video_id, 'url': canonical(video_id or ''),
                            'title': entry.findtext('a:title', default='', namespaces=NS),
+                           'description': entry.findtext('media:group/media:description', default='', namespaces=NS),
                            'published_at': instant(published).isoformat(), 'channel_id': cid,
                            'channel': channel['name'], 'priority': channel.get('priority', 50)})
         return sorted(videos, key=lambda v: instant(v['published_at']), reverse=True)
@@ -127,6 +129,7 @@ def public_metadata(video_id):
         if not isinstance(stamp, (int, float)):
             raise Problem('PUBLIC_PUBLISH_TIME_MISSING')
         return {'video_id': video_id, 'channel_id': value['channel_id'], 'title': value['title'],
+                'description': value.get('description') or '',
                 'published_at': datetime.fromtimestamp(stamp, UTC).isoformat()}
     except (ValueError, KeyError, TypeError, Problem):
         return {'video_id': video_id, 'error': 'PUBLIC_METADATA_FAILED'}
@@ -169,6 +172,10 @@ class Monitor:
         if 'processed_at' not in columns:
             self.db.execute('ALTER TABLE channels ADD COLUMN processed_at TEXT')
             self.db.commit()
+        video_columns = {r[1] for r in self.db.execute('PRAGMA table_info(videos)')}
+        if 'description' not in video_columns:
+            self.db.execute("ALTER TABLE videos ADD COLUMN description TEXT DEFAULT ''")
+            self.db.commit()
         for channel in self.channels:
             self.db.execute("UPDATE videos SET channel=? WHERE channel_id=? AND channel=''",
                             (channel['name'], channel['channel_id']))
@@ -176,12 +183,17 @@ class Monitor:
         self.reconcile_selection()
 
     def selection_reason(self, item):
+        item = dict(item)
         if item['channel_id'] in self.excluded_channels:
             return 'CHANNEL_REMOVED_BY_USER'
         channel = self.channel_map.get(item['channel_id'], {})
         pattern = channel.get('title_regex')
         if pattern and not re.search(pattern, item['title']):
             return 'CHANNEL_SERIES_EXCLUDED'
+        content_pattern = channel.get('content_regex')
+        if content_pattern and not re.search(content_pattern, item['title'] + '\n' +
+                                            (item.get('description') or '')):
+            return 'CHANNEL_PERSON_EXCLUDED'
         return None
 
     def reconcile_selection(self):
@@ -210,13 +222,15 @@ class Monitor:
         video_id = item['video_id']
         canonical(video_id)
         if status != 'SENT' and self.selection_reason(dict(channel_id=item.get('channel_id', ''),
-                                                         title=item.get('title', ''))):
+                                                         title=item.get('title', ''),
+                                                         description=item.get('description', ''))):
             return
         self.db.execute('INSERT OR IGNORE INTO videos '
-            '(video_id,published_at,title,channel_id,channel,priority,status) VALUES (?,?,?,?,?,?,?)',
+            '(video_id,published_at,title,channel_id,channel,priority,status,description) VALUES (?,?,?,?,?,?,?,?)',
             (video_id, item.get('published_at', self.policy['initial_since']),
              item.get('title', video_id), item.get('channel_id', ''),
-             item.get('channel') or item.get('channel_name', ''), item.get('priority', 50), status))
+             item.get('channel') or item.get('channel_name', ''), item.get('priority', 50), status,
+             item.get('description') or ''))
 
     def bootstrap(self):
         if self.db.execute("SELECT 1 FROM meta WHERE key='legacy_imported'").fetchone():
@@ -466,11 +480,11 @@ class Monitor:
         self.reconcile_selection()
         plan = self.backlog_status()
         if plan and plan['remaining']:
-            return [dict(row) for row in self.db.execute("SELECT v.* FROM videos v JOIN backlog_items b "
+            return [{k: row[k] for k in row.keys() if k != 'description'} for row in self.db.execute("SELECT v.* FROM videos v JOIN backlog_items b "
                 "ON b.video_id=v.video_id WHERE v.status IN ('PENDING','CAPTIONS_READY','CAPTION_WAIT','READY') "
                 "AND v.retry_at<=? AND b.not_before<=? ORDER BY (v.status='READY') DESC,b.wave,"
                 "v.priority DESC,v.published_at,v.video_id LIMIT ?", (time.time(), now(), limit))]
-        return [dict(row) for row in self.db.execute("SELECT v.* FROM videos v LEFT JOIN channels c "
+        return [{k: row[k] for k in row.keys() if k != 'description'} for row in self.db.execute("SELECT v.* FROM videos v LEFT JOIN channels c "
             "ON v.channel_id=c.channel_id WHERE v.status IN "
             "('PENDING','CAPTIONS_READY','CAPTION_WAIT','READY') AND v.retry_at<=? "
             "ORDER BY (v.status='READY') DESC,v.priority DESC,COALESCE(c.processed_at,'') ASC,"

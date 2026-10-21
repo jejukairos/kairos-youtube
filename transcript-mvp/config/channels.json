@@ -193,6 +193,33 @@
       "initial_since": "2026-10-21T03:31:24+00:00",
       "title_regex": "(?i)^\\s*[\\[【(]?\\s*(?:tech\\s*talk|테크\\s*토크|글로벌\\s*마켓\\s*토크)(?=\\s|[\\]】):：|]|$)",
       "series_note": "Tech Talk(시즌 포함) 및 글로벌 마켓토크만. 모닝/마감 브리핑·연금·홍보·기타 방송 제외."
+    },
+    {
+      "channel_id": "UChY8VUjXv0aA7RF9hDQ0ISg",
+      "url": "https://www.youtube.com/@sbs_explained",
+      "name": "교양이를 부탁해",
+      "priority": 50,
+      "initial_since": "2026-10-21T03:36:01+00:00",
+      "content_regex": "윤\\s*지\\s*호|윤쎈",
+      "series_note": "제목 또는 공개 설명란에서 윤지호/윤쎈이 확인되는 관련 영상만."
+    },
+    {
+      "channel_id": "UCE-94tymU-LjuglJ_wqzhHA",
+      "url": "https://www.youtube.com/@choikytv",
+      "name": "최경영TV",
+      "priority": 50,
+      "initial_since": "2026-10-21T03:36:01+00:00",
+      "content_regex": "윤\\s*지\\s*호|윤쎈",
+      "series_note": "제목 또는 공개 설명란에서 윤지호/윤쎈이 확인되는 관련 영상만."
+    },
+    {
+      "channel_id": "UC6kZpTl39-_SqfBrF1-N2oQ",
+      "url": "https://www.youtube.com/channel/UC6kZpTl39-_SqfBrF1-N2oQ",
+      "name": "연합뉴스경제TV",
+      "priority": 50,
+      "initial_since": "2026-10-21T03:36:01+00:00",
+      "content_regex": "윤\\s*지\\s*호|윤쎈",
+      "series_note": "제목 또는 공개 설명란에서 윤지호/윤쎈이 확인되는 관련 영상만."
     }
   ],
   "excluded_channel_ids": [

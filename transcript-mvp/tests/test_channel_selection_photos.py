@@ -64,6 +64,50 @@ class SelectionTests(unittest.TestCase):
         self.app.discover(end, lambda c: {'channel_id': fixture.CID, 'videos': [old, new]})
         self.assertEqual([v['video_id'] for v in self.app.queue()], ['n6nO1MkYId0'])
 
+    def test_person_match_in_description_survives_reload(self):
+        config = {'channels': [{'channel_id': fixture.CID, 'name': 'Test',
+                               'content_regex': r'윤\s*지\s*호|윤쎈'}]}
+        self.reload(config)
+        item = self.item()
+        item['description'] = '출연: 윤지호 경제평론가'
+        self.app.add(item)
+        self.app.db.commit()
+        self.reload(config)
+        self.assertEqual([v['video_id'] for v in self.app.queue()], [fixture.VID])
+        other = self.item('n6nO1MkYId0')
+        other['description'] = '다른 출연자의 방송'
+        self.app.add(other)
+        self.assertIsNone(self.app.db.execute('SELECT * FROM videos WHERE video_id=?',
+                                            (other['video_id'],)).fetchone())
+        alias = self.item('QslXeEZ0tPI')
+        alias['title'] = '윤쎈의 경제 전망'
+        self.app.add(alias)
+        self.assertIsNotNone(self.app.db.execute('SELECT * FROM videos WHERE video_id=?',
+                                               (alias['video_id'],)).fetchone())
+
+    def test_public_feed_preserves_description_for_person_filter(self):
+        xml = f'''<feed xmlns="http://www.w3.org/2005/Atom"
+          xmlns:yt="http://www.youtube.com/xml/schemas/2015"
+          xmlns:media="http://search.yahoo.com/mrss/">
+          <yt:channelId>{fixture.CID}</yt:channelId>
+          <link rel="alternate" href="https://www.youtube.com/channel/{fixture.CID}"/>
+          <entry><yt:channelId>{fixture.CID}</yt:channelId><yt:videoId>{fixture.VID}</yt:videoId>
+          <title>투자 전망</title><published>{fixture.START.isoformat()}</published>
+          <media:group><media:description>출연: 윤지호</media:description></media:group>
+          </entry></feed>'''
+        from kairos_transcripts.monitor import parse_feed
+        item = parse_feed(xml, {'channel_id': fixture.CID, 'name': 'Test'})[0]
+        self.assertEqual(item['description'], '출연: 윤지호')
+
+    def test_existing_database_migrates_description_without_losing_history(self):
+        self.app.add(self.item(), 'SENT')
+        self.app.db.execute('ALTER TABLE videos DROP COLUMN description')
+        self.app.db.commit()
+        self.reload({'channels': [{'channel_id': fixture.CID, 'name': 'Test'}]})
+        row = self.app.db.execute('SELECT * FROM videos WHERE video_id=?', (fixture.VID,)).fetchone()
+        self.assertEqual(row['status'], 'SENT')
+        self.assertEqual(row['description'], '')
+
     def test_dispatch_blocks_removed_channel_even_when_manually_set_ready(self):
         self.app.add(self.item(), 'READY')
         self.app.excluded_channels.add(fixture.CID)
