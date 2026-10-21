@@ -175,3 +175,9 @@ RSS 설명란을 SQLite에 보존하고 기존 DB를 이력 손실 없이 마이
 ## 2026-10-21 탁튜브 김탁 추가
 
 사용자 지정 Channel ID UCpDKNykCqVBBtEYZZqht4YA의 공개 채널 페이지 제목이 탁튜브 김탁이고 externalId가 일치함을 확인했다. RSS 첫 조회는 실패했지만 재확인에서는 공개 업로드 피드와 최근 영상 OErg7QTvNKs·Xv-3CthUaQY를 정상 확인했다. 2026-10-21 12:40:40 KST 이후 업로드부터 별도 프로그램/인물 필터 없이 감시하며 기존 중요도·자막·중복·사용량 정책을 유지한다. 총 감시 채널 35개. 채널 ID 형식·중복·제외 목록 충돌·기존 필터 정규식 검증을 통과했다. 두 기존 예약의 대상 수와 지침도 갱신했다. 이번 변경에서 영상 자막이나 AI API를 호출하거나 Telegram 메시지를 보내지는 않았다.
+
+## 2026-10-21 사용자 스크린샷과 같은 YouTube 미리보기 카드로 변경
+
+새 요약의 첫 메시지를 사진 첨부(sendPhoto)에서 채널명·제목·원본 URL이 있는 sendMessage 링크 카드로 변경했다. 원본과 일치하는 preview_url을 지정하고 is_disabled=false, prefer_large_media=true, show_above_text=false로 큰 YouTube 미리보기를 본문 아래에 요청한다. 요약은 다음 메시지로 보내며 본문에 근거 시각/분류표를 붙이지 않는 기존 규칙을 유지한다. 과거 SENT와 이미 시작한 번들의 해시·사진 발송 이력은 바꾸지 않는다.
+
+다른 영상/호스트의 preview_url을 거부하고 기존 사진 번들의 재개 경로는 보존했다. 단위 테스트 63개 통과. 공식 LinkPreviewOptions 문서(https://core.telegram.org/bots/api#linkpreviewoptions)에 따라 요청하며 실제 썸네일·재생 버튼 모양은 Telegram 렌더링에 따른다. 실제 링크 카드 시험 결과는 후속 기록으로 구분한다.

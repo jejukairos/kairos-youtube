@@ -597,12 +597,12 @@ class Monitor:
         self.db.commit()
         return {'status': 'DISPATCHED', 'video_id': video_id, 'request_id': request_id}
 
-    def notice(self, key, message, photo_video_id=None):
+    def notice(self, key, message, photo_video_id=None, preview_video_id=None):
         # Stable keys allow one backlog/usage warning per day, even across retries.
         record = 'notice-dispatched:' + key
         if self.db.execute('SELECT 1 FROM meta WHERE key=?', (record,)).fetchone():
             return {'status': 'NOTICE_ALREADY_REQUESTED', 'notice_key': key}
-        bundle = notice_bundle(key, message, photo_video_id)
+        bundle = notice_bundle(key, message, photo_video_id, preview_video_id)
         request_id = uuid.uuid4().hex
         inputs = {'bundle': base64.b64encode(json.dumps(bundle, ensure_ascii=False).encode()).decode(),
                   'request_id': request_id}

@@ -146,6 +146,35 @@ class SelectionTests(unittest.TestCase):
 
 
 class PhotoTests(unittest.TestCase):
+    def test_new_summary_uses_youtube_preview_card_followed_by_summary(self):
+        bundle = delivery_bundle(summary(), transcript())
+        validate_bundle(bundle)
+        first = bundle['parts'][0]
+        self.assertTrue(first['preview'])
+        self.assertEqual(first['preview_url'], bundle['url'])
+        self.assertNotIn('photo', first)
+        self.assertTrue(all(not p['preview'] for p in bundle['parts'][1:]))
+
+    def test_preview_transport_requests_large_media_below_channel_title_link(self):
+        session = Mock()
+        session.post.return_value = Mock(status_code=200)
+        session.post.return_value.json.return_value = {'ok': True, 'result': {'message_id': 1}}
+        client = Telegram('123:' + 'x' * 25, '12345', session)
+        part = delivery_bundle(summary(), transcript())['parts'][0]
+        self.assertEqual(client.send(part)['status'], 'SENT')
+        self.assertTrue(session.post.call_args.args[0].endswith('/sendMessage'))
+        self.assertEqual(session.post.call_args.kwargs['json']['link_preview_options'],
+                         {'is_disabled': False, 'url': part['preview_url'],
+                          'prefer_large_media': True, 'show_above_text': False})
+
+    def test_preview_url_cannot_point_to_another_video_or_host(self):
+        for url in ['https://private.example/image', 'https://www.youtube.com/watch?v=n6nO1MkYId0']:
+            bundle = delivery_bundle(summary(), transcript())
+            bundle['parts'][0]['preview_url'] = url
+            bundle['bundle_hash'] = digest({k: v for k, v in bundle.items() if k != 'bundle_hash'})
+            with self.assertRaisesRegex(Problem, 'INVALID_DELIVERY_PREVIEW'):
+                validate_bundle(bundle)
+
     def test_photo_caption_bound_and_same_video_url_required(self):
         card = photo_card('L2GG_DeUDa0', '📺' * 500, '긴 제목📊' * 500)
         self.assertLessEqual(units(card['text']), 1024)

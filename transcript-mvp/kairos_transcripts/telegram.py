@@ -26,6 +26,12 @@ def photo_card(video_id, channel, title):
     return {'text': caption, 'preview': False, 'photo': thumbnail_url(video_id)}
 
 
+def link_card(video_id, channel, title):
+    url = canonical(video_id)
+    text = f"📺 {split_message(channel or 'YouTube', 220)[0]}\n📊 {split_message(title or video_id, 650)[0]}\n{url}"
+    return {'text': text, 'preview': True, 'preview_url': url}
+
+
 def split_message(text, limit=3800):
     if not 2 <= limit <= 4096:
         raise Problem('INVALID_MESSAGE_LIMIT')
@@ -87,14 +93,25 @@ def validate_bundle(bundle):
                     or (not notice and match[1] != bundle['video_id'])
                     or canonical(match[1]) not in part['text']):
                 raise Problem('INVALID_DELIVERY_PHOTO')
+        if 'preview_url' in part:
+            url = part['preview_url']
+            match = re.fullmatch(r'https://www\.youtube\.com/watch\?v=([A-Za-z0-9_-]{11})',
+                                 url) if isinstance(url, str) else None
+            if (not match or not part['preview'] or 'photo' in part or url not in part['text']
+                    or (not notice and match[1] != bundle['video_id'])):
+                raise Problem('INVALID_DELIVERY_PREVIEW')
     return bundle
 
 
-def notice_bundle(key, text, photo_video_id=None):
+def notice_bundle(key, text, photo_video_id=None, preview_video_id=None):
+    if photo_video_id and preview_video_id:
+        raise Problem('CONFLICTING_NOTICE_MEDIA')
     value = {'schema': 1, 'kind': 'notice', 'video_id': 'notice:' + key,
              'parts': [{'text': p, 'preview': False} for p in split_message(text)]}
     if photo_video_id:
         value['parts'] = [{'text': text, 'preview': False, 'photo': thumbnail_url(photo_video_id)}]
+    if preview_video_id:
+        value['parts'] = [{'text': text, 'preview': True, 'preview_url': canonical(preview_video_id)}]
     value['bundle_hash'] = digest(value)
     return validate_bundle(value)
 
@@ -122,6 +139,10 @@ class Telegram:
                 method = 'sendMessage'
                 payload = {'chat_id': self.chat_id, 'text': part['text'],
                            'link_preview_options': {'is_disabled': not part['preview']}}
+                if part.get('preview_url'):
+                    payload['link_preview_options'].update(url=part['preview_url'],
+                                                          prefer_large_media=True,
+                                                          show_above_text=False)
             response = self.session.post(f'https://api.telegram.org/bot{self.token}/{method}',
                 json=payload,
                 timeout=(8, 25), allow_redirects=False)

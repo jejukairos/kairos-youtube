@@ -23,6 +23,7 @@ def main():
     notice.add_argument('--key', required=True)
     notice.add_argument('--message-file', type=Path, required=True)
     notice.add_argument('--photo-video-id')
+    notice.add_argument('--preview-video-id')
     review = sub.add_parser('review')
     review.add_argument('video_id')
     review.add_argument('draft', type=Path)
@@ -56,7 +57,8 @@ def main():
         elif args.command == 'recover-gap':
             result = app.recover_gap(args.channel_id)
         elif args.command == 'notice':
-            result = app.notice(args.key, args.message_file.read_text(encoding='utf-8'), args.photo_video_id)
+            result = app.notice(args.key, args.message_file.read_text(encoding='utf-8'),
+                                args.photo_video_id, args.preview_video_id)
         elif args.command == 'plan-backlog':
             result = app.create_backlog_plan(args.id, args.starts)
         else:
