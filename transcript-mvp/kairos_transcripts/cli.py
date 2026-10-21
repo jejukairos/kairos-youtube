@@ -105,13 +105,15 @@ def main(argv=None):
                     value['duplicate_of'] = duplicate
                 save_json(target.with_suffix('.summary.json'), value)
                 save_text(target.with_suffix('.summary.txt'), render_summary(value, item))
-                if value['importance'] < 3 or value['simple_content'] or value.get('duplicate_of'):
+                policy_path = Path(__file__).resolve().parent.parent / 'config/monitor.json'
+                policy = read_json(policy_path).get('delivery_policy', 'important') if policy_path.is_file() else 'important'
+                if policy != 'all_selected' and (value['importance'] < 3 or value['simple_content'] or value.get('duplicate_of')):
                     result = {'status': 'FILTERED', 'video_id': item['video_id']}
                     stale = target.with_suffix('.delivery.json')
                     if stale.is_file():
                         stale.unlink()
                 else:
-                    bundle = delivery_bundle(value, item)
+                    bundle = delivery_bundle(value, item, policy)
                     save_json(target.with_suffix('.delivery.json'), bundle)
                     result = {'status': 'READY', 'video_id': item['video_id'], 'parts': len(bundle['parts'])}
         else:

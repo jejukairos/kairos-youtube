@@ -218,6 +218,27 @@ class Monitor:
     def close(self):
         self.db.close()
 
+    def restore_policy_filtered(self):
+        if self.policy.get('delivery_policy') != 'all_selected':
+            raise Problem('ALL_SELECTED_POLICY_REQUIRED')
+        restored = []
+        for row in self.db.execute("SELECT * FROM videos WHERE status='FILTERED' AND "
+                                   "(reason IS NULL OR reason IN ('LOW_IMPORTANCE','SIMPLE_CONTENT','CONTENT_DUPLICATE'))").fetchall():
+            reason = self.selection_reason(row)
+            if reason:
+                self.db.execute('UPDATE videos SET reason=? WHERE video_id=?', (reason, row['video_id']))
+                continue
+            path = self.root / 'summaries' / f"{row['video_id']}.summary.json"
+            if not path.is_file():
+                continue
+            value = read_json(path)
+            if value.get('importance', 5) < 3 or value.get('simple_content') or value.get('duplicate_of'):
+                self.db.execute("UPDATE videos SET status='PENDING',reason='RESTORED_ALL_SELECTED',retry_at=0 WHERE video_id=?",
+                                (row['video_id'],))
+                restored.append(row['video_id'])
+        self.db.commit()
+        return {'restored': restored, 'count': len(restored)}
+
     def add(self, item, status='PENDING'):
         video_id = item['video_id']
         canonical(video_id)
@@ -366,6 +387,30 @@ class Monitor:
         save_json(self.root / 'state/channel-audit.json', result)
         return result
 
+    def progress(self, since=None, until=None):
+        end = instant(until) if until else boundary(datetime.now(UTC))
+        start = instant(since) if since else boundary(end - timedelta(seconds=1))
+        if start >= end:
+            raise Problem('INVALID_PROGRESS_WINDOW')
+        videos = []
+        counts = {'sent': 0, 'waiting': 0, 'filtered': 0, 'delivery_attention': 0}
+        for row in self.db.execute('SELECT * FROM videos ORDER BY published_at,video_id'):
+            if row['channel_id'] not in self.channel_map or self.selection_reason(row):
+                continue
+            if not start <= instant(row['published_at']) < end:
+                continue
+            category = ('sent' if row['status'] == 'SENT' else 'filtered' if row['status'] == 'FILTERED'
+                        else 'waiting' if row['status'] in PENDING else 'delivery_attention')
+            counts[category] += 1
+            videos.append({k: row[k] for k in ('video_id','channel','title','status','reason')})
+        audit = self.audit()
+        result = {'since_utc': start.isoformat(), 'until_utc': end.isoformat(),
+                  'known_matching_videos': len(videos), **counts,
+                  'coverage_confirmed': audit['coverage_confirmed'], 'coverage_issues': audit['issues'],
+                  'videos': videos}
+        save_json(self.root / 'state/window-progress.json', result)
+        return result
+
     def stats(self):
         counts = {r[0]: r[1] for r in self.db.execute('SELECT status,count(*) FROM videos GROUP BY status')}
         pending = sum(counts.get(status, 0) for status in PENDING)
@@ -396,7 +441,9 @@ class Monitor:
             wave[key] += 1
         return {'plan_id': rows[0]['plan_id'], 'waves': list(waves.values()),
                 'remaining': sum(w['remaining'] for w in waves.values()),
-                'usage_stop_percent': 80, 'max_videos_per_slot': 43, 'max_characters_per_slot': 360000}
+                'usage_stop_percent': 80,
+                'max_videos_per_slot': None if self.policy.get('delivery_policy') == 'all_selected' else 43,
+                'max_characters_per_slot': None if self.policy.get('delivery_policy') == 'all_selected' else 360000}
 
     def create_backlog_plan(self, plan_id, starts):
         if self.backlog_status():
@@ -422,6 +469,8 @@ class Monitor:
         row = self.db.execute('SELECT not_before FROM backlog_items WHERE video_id=?',(video_id,)).fetchone()
         if row and instant(row['not_before']) > datetime.now(UTC):
             raise Problem('BACKLOG_WAVE_NOT_DUE')
+        if self.policy.get('delivery_policy') == 'all_selected':
+            return None, None
         if row:
             return 43, 360000
         return self.policy['max_videos_per_run'], self.policy['max_transcript_characters_per_run']
@@ -478,6 +527,16 @@ class Monitor:
 
     def queue(self, limit=8):
         self.reconcile_selection()
+        if self.policy.get('delivery_policy') == 'all_selected':
+            # New uploads keep moving while the older three-wave plan is scheduled.
+            # LIMIT is a page size; callers continue paging until blocked or exhausted.
+            return [{k: row[k] for k in row.keys() if k != 'description'} for row in self.db.execute(
+                "SELECT v.* FROM videos v LEFT JOIN backlog_items b ON b.video_id=v.video_id "
+                "WHERE v.status IN ('PENDING','CAPTIONS_READY','CAPTION_WAIT','READY') AND v.retry_at<=? "
+                "AND (b.video_id IS NULL OR b.not_before<=?) "
+                "ORDER BY (v.status='READY') DESC,(v.status='CAPTIONS_READY') DESC,"
+                "(b.video_id IS NOT NULL) DESC,b.wave,v.priority DESC,v.published_at,v.video_id LIMIT ?",
+                (time.time(), now(), limit))]
         plan = self.backlog_status()
         if plan and plan['remaining']:
             return [{k: row[k] for k in row.keys() if k != 'description'} for row in self.db.execute("SELECT v.* FROM videos v JOIN backlog_items b "
@@ -507,7 +566,7 @@ class Monitor:
         budget = self.db.execute('SELECT * FROM run_budget WHERE slot=?', (slot,)).fetchone()
         used_ids = json.loads(budget['video_ids']) if budget else []
         used_chars = budget['characters'] if budget else 0
-        if video_id not in used_ids and len(used_ids) >= video_limit:
+        if video_limit is not None and video_id not in used_ids and len(used_ids) >= video_limit:
             raise Problem('RUN_VIDEO_BUDGET_REACHED')
         if not (self.root / 'transcripts' / f'{video_id}.json').is_file():
             # Reserve a shared start time before network I/O; independent CLI
@@ -525,7 +584,7 @@ class Monitor:
         if result['status'] in ('OK', 'CACHED'):
             status, retry = 'CAPTIONS_READY', 0
             if video_id not in used_ids:
-                if used_chars + result['characters'] > character_limit:
+                if character_limit is not None and used_chars + result['characters'] > character_limit:
                     raise Problem('RUN_TEXT_BUDGET_REACHED_TRANSCRIPT_PRESERVED')
                 used_ids.append(video_id)
                 self.db.execute('INSERT OR REPLACE INTO run_budget VALUES (?,?,?)',
@@ -556,12 +615,15 @@ class Monitor:
         target = self.root / 'summaries' / video_id
         save_json(target.with_suffix('.summary.json'), value)
         save_text(target.with_suffix('.summary.txt'), render_summary(value, item))
-        if value['importance'] < 3 or value['simple_content'] or value.get('duplicate_of'):
+        policy = self.policy.get('delivery_policy', 'important')
+        if policy != 'all_selected' and (value['importance'] < 3 or value['simple_content'] or value.get('duplicate_of')):
             status = 'FILTERED'
         else:
             status = 'READY'
-            save_json(target.with_suffix('.delivery.json'), delivery_bundle(value, item))
-        self.db.execute('UPDATE videos SET status=?,reason=NULL,retry_at=0 WHERE video_id=?', (status, video_id))
+            save_json(target.with_suffix('.delivery.json'), delivery_bundle(value, item, policy))
+        reason = ('CONTENT_DUPLICATE' if value.get('duplicate_of') else
+                  'SIMPLE_CONTENT' if value['simple_content'] else 'LOW_IMPORTANCE') if status == 'FILTERED' else None
+        self.db.execute('UPDATE videos SET status=?,reason=?,retry_at=0 WHERE video_id=?', (status, reason, video_id))
         self.db.commit()
         return {'status': status, 'video_id': video_id}
 

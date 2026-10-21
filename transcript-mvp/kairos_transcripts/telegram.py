@@ -72,7 +72,11 @@ def validate_bundle(bundle):
         raise Problem('INVALID_DELIVERY_URL')
     if bundle.get('bundle_hash') != digest({k: v for k, v in bundle.items() if k != 'bundle_hash'}):
         raise Problem('DELIVERY_BUNDLE_CHANGED')
-    if not notice and (type(bundle.get('importance')) is not int or not 3 <= bundle['importance'] <= 5):
+    policy = bundle.get('delivery_policy', 'important')
+    if policy not in ('important', 'all_selected'):
+        raise Problem('INVALID_DELIVERY_POLICY')
+    minimum = 1 if policy == 'all_selected' else 3
+    if not notice and (type(bundle.get('importance')) is not int or not minimum <= bundle['importance'] <= 5):
         raise Problem('FILTERED_LOW_IMPORTANCE')
     for key in (() if notice else ('transcript_hash', 'validated_summary_hash')):
         if not re.fullmatch(r'[a-f0-9]{64}', bundle.get(key, '')):

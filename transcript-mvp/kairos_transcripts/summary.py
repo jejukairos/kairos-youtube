@@ -179,10 +179,12 @@ def generate_local(transcript, model):
         raise Problem('INVALID_LOCAL_RESPONSE') from None
 
 
-def delivery_bundle(value, transcript):
+def delivery_bundle(value, transcript, delivery_policy='important'):
     from .telegram import link_card, split_message
     value = validate_summary(value, transcript)
-    if value['importance'] < 3 or value['simple_content'] or value.get('duplicate_of'):
+    if delivery_policy not in ('important', 'all_selected'):
+        raise Problem('INVALID_DELIVERY_POLICY')
+    if delivery_policy != 'all_selected' and (value['importance'] < 3 or value['simple_content'] or value.get('duplicate_of')):
         raise Problem('FILTERED_LOW_IMPORTANCE_OR_DUPLICATE')
     # A ready bundle contains only the summary, never the full source captions or secrets.
     # It is an owner-reviewed delivery artifact, not independently verified source evidence.
@@ -193,5 +195,7 @@ def delivery_bundle(value, transcript):
               'transcript_hash': value['transcript_hash'], 'importance': value['importance'],
               'validated_summary_hash': digest(value), 'prepared_at_utc': now(),
               'parts': parts}
+    if delivery_policy == 'all_selected':
+        bundle['delivery_policy'] = delivery_policy
     bundle['bundle_hash'] = digest(bundle)
     return bundle

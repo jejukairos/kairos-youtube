@@ -30,6 +30,10 @@ def main():
     sub.add_parser('sync')
     sub.add_parser('status')
     sub.add_parser('audit')
+    sub.add_parser('restore-policy-filtered')
+    progress = sub.add_parser('progress')
+    progress.add_argument('--since')
+    progress.add_argument('--until')
     plan = sub.add_parser('plan-backlog')
     plan.add_argument('--id', required=True)
     plan.add_argument('--starts', nargs=3, required=True)
@@ -54,6 +58,10 @@ def main():
             result = app.sync()
         elif args.command == 'audit':
             result = app.audit()
+        elif args.command == 'restore-policy-filtered':
+            result = app.restore_policy_filtered()
+        elif args.command == 'progress':
+            result = app.progress(args.since, args.until)
         elif args.command == 'recover-gap':
             result = app.recover_gap(args.channel_id)
         elif args.command == 'notice':
