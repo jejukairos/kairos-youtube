@@ -184,6 +184,15 @@
       "initial_since": "2026-10-21T03:11:25+00:00",
       "title_regex": "^\\s*한국경제신문\\s*30\\s*분\\s*만에\\s*읽기(?:\\s|[|｜:：]|$)",
       "series_note": "라이브 탭의 한국경제신문 30분 만에 읽기만. 다른 방송·클립 제외."
+    },
+    {
+      "channel_id": "UCq7h8qFlHN5FL_T6waKZllw",
+      "url": "https://www.youtube.com/@samsungsecurities",
+      "name": "삼성증권",
+      "priority": 50,
+      "initial_since": "2026-10-21T03:31:24+00:00",
+      "title_regex": "(?i)^\\s*[\\[【(]?\\s*(?:tech\\s*talk|테크\\s*토크|글로벌\\s*마켓\\s*토크)(?=\\s|[\\]】):：|]|$)",
+      "series_note": "Tech Talk(시즌 포함) 및 글로벌 마켓토크만. 모닝/마감 브리핑·연금·홍보·기타 방송 제외."
     }
   ],
   "excluded_channel_ids": [
