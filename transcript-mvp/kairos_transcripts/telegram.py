@@ -177,6 +177,8 @@ class Outbox:
         self.db.execute('CREATE TABLE IF NOT EXISTS deliveries ('
                         'video_id TEXT PRIMARY KEY, bundle_hash TEXT NOT NULL, '
                         'target_hash TEXT NOT NULL, parts TEXT NOT NULL)')
+        self.db.execute('CREATE TABLE IF NOT EXISTS chat_limits ('
+                        'target_hash TEXT PRIMARY KEY,retry_at REAL,failure_count INTEGER DEFAULT 0)')
         self.db.commit()
         self.checkpoint = checkpoint
 
@@ -219,6 +221,21 @@ class Outbox:
             if state.get('retry_at', 0) > time.time():
                 self.db.commit()
                 return {'status': 'WAITING_RETRY', 'video_id': video_id, 'retry_at': state['retry_at']}
+            limit = self.db.execute('SELECT retry_at FROM chat_limits WHERE target_hash=?',
+                                    (client.target_hash,)).fetchone()
+            shared_retry = limit[0] if limit else 0
+            for encoded, in self.db.execute('SELECT parts FROM deliveries WHERE target_hash=?',
+                                            (client.target_hash,)):
+                shared_retry = max(shared_retry, max((p.get('retry_at', 0) for p in json.loads(encoded)
+                                                       if p['status'] == 'RETRY'), default=0))
+            if shared_retry > time.time():
+                parts[index] = {'status': 'RETRY', 'retry_at': shared_retry,
+                                'reason': 'TELEGRAM_CHAT_RATE_LIMITED'}
+                self.db.execute('UPDATE deliveries SET parts=? WHERE video_id=?', (json.dumps(parts), video_id))
+                self.db.commit()
+                if self.checkpoint:
+                    self.checkpoint()
+                return {'status': 'WAITING_RETRY', 'video_id': video_id, 'retry_at': shared_retry}
             parts[index] = {'status': 'SENDING'}
             self.db.execute('UPDATE deliveries SET parts=? WHERE video_id=?', (json.dumps(parts), video_id))
             self.db.commit()
@@ -229,6 +246,17 @@ class Outbox:
             except Exception:  # noqa: BLE001 -- preserve uncertain delivery even for unexpected transport failures
                 result = {'status': 'UNCERTAIN', 'reason': 'CLIENT_FAILED_AFTER_SEND_STARTED'}
             self.db.execute('BEGIN IMMEDIATE')
+            if result['status'] == 'RETRY':
+                previous = self.db.execute('SELECT failure_count FROM chat_limits WHERE target_hash=?',
+                                           (client.target_hash,)).fetchone()
+                failures = (previous[0] if previous else 0) + 1
+                # Respect provider retry_after and increase pauses on repeated failures.
+                retry = max(result.get('retry_at', 0), time.time() + min(3600, 60 * 2 ** min(failures-1, 6)))
+                result = dict(result, retry_at=retry)
+                self.db.execute('INSERT OR REPLACE INTO chat_limits VALUES (?,?,?)',
+                                (client.target_hash, retry, failures))
+            elif result['status'] == 'SENT':
+                self.db.execute('DELETE FROM chat_limits WHERE target_hash=?', (client.target_hash,))
             parts[index] = result
             self.db.execute('UPDATE deliveries SET parts=? WHERE video_id=?', (json.dumps(parts), video_id))
             self.db.commit()

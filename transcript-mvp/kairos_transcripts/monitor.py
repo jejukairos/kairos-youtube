@@ -270,15 +270,21 @@ class Monitor:
                           self.policy['state_branch'], optional=True)
         changed = 0
         observed = {}
+        old_pause = self.db.execute("SELECT value FROM meta WHERE key='telegram_source_retry_at'").fetchone()
+        telegram_pause = float(old_pause['value']) if old_pause else 0
         if raw:
             path = self.root / 'state/remote-delivery-snapshot.sqlite3'
             path.write_bytes(raw)
             remote = sqlite3.connect(path)
             try:
+                if remote.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='chat_limits'").fetchone():
+                    telegram_pause = max(telegram_pause, remote.execute('SELECT COALESCE(MAX(retry_at),0) FROM chat_limits').fetchone()[0])
                 for video_id, encoded in remote.execute('SELECT video_id,parts FROM deliveries'):
+                    parts = json.loads(encoded)
+                    telegram_pause = max(telegram_pause, max((p.get('retry_at', 0) for p in parts
+                                                               if p['status'] == 'RETRY'), default=0))
                     if video_id.startswith('notice:'):
                         continue
-                    parts = json.loads(encoded)
                     self.add({'video_id': video_id})
                     if all(p['status'] == 'SENT' for p in parts):
                         status, reason, retry = 'SENT', None, 0
@@ -318,6 +324,11 @@ class Monitor:
                     else:
                         self.db.execute("UPDATE videos SET status='READY',reason='REMOTE_RUN_FINISHED_RECHECK_STATE',retry_at=? WHERE video_id=?",
                                         (time.time() + 60, row['video_id']))
+        self.db.commit()
+        if telegram_pause > time.time():
+            self.db.execute("INSERT OR REPLACE INTO meta VALUES ('telegram_source_retry_at',?)", (str(telegram_pause),))
+        else:
+            self.db.execute("DELETE FROM meta WHERE key='telegram_source_retry_at'")
         self.db.commit()
         self.reconcile_selection()
         return {'status': 'SYNCED', 'records_checked': changed}
@@ -422,6 +433,9 @@ class Monitor:
         next_request = self.db.execute("SELECT value FROM meta WHERE key='caption_next_request_at'").fetchone()
         if next_request and float(next_request['value']) > time.time():
             result['caption_next_request_at_utc'] = datetime.fromtimestamp(float(next_request['value']), UTC).isoformat()
+        telegram = self.db.execute("SELECT value FROM meta WHERE key='telegram_source_retry_at'").fetchone()
+        if telegram and float(telegram['value']) > time.time():
+            result['telegram_source_resume_at_utc'] = datetime.fromtimestamp(float(telegram['value']), UTC).isoformat()
         plan = self.backlog_status()
         if plan:
             result['backlog_plan'] = plan
@@ -632,6 +646,9 @@ class Monitor:
         if not row or row['status'] != 'READY' or row['retry_at'] > time.time():
             raise Problem('VIDEO_NOT_READY_FOR_DISPATCH')
         self.require_selected(row)
+        telegram = self.db.execute("SELECT value FROM meta WHERE key='telegram_source_retry_at'").fetchone()
+        if telegram and float(telegram['value']) > time.time():
+            raise Problem('TELEGRAM_SOURCE_COOLDOWN')
         if self.policy.get('require_channel_audit_before_dispatch'):
             audit = self.audit()
             if audit['channels_checked'] != audit['channels_expected']:
@@ -664,6 +681,9 @@ class Monitor:
         record = 'notice-dispatched:' + key
         if self.db.execute('SELECT 1 FROM meta WHERE key=?', (record,)).fetchone():
             return {'status': 'NOTICE_ALREADY_REQUESTED', 'notice_key': key}
+        pause = self.db.execute("SELECT value FROM meta WHERE key='telegram_source_retry_at'").fetchone()
+        if pause and float(pause['value']) > time.time():
+            return {'status': 'NOTICE_WAITING_TELEGRAM', 'notice_key': key, 'retry_at': float(pause['value'])}
         bundle = notice_bundle(key, message, photo_video_id, preview_video_id)
         request_id = uuid.uuid4().hex
         inputs = {'bundle': base64.b64encode(json.dumps(bundle, ensure_ascii=False).encode()).decode(),

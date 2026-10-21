@@ -1,7 +1,7 @@
 import json
 import unittest
 from datetime import UTC, datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import test_monitor as fixture
 from test_pipeline import summary, transcript
@@ -9,7 +9,7 @@ from test_pipeline import summary, transcript
 from kairos_transcripts.common import Problem, save_json
 from kairos_transcripts.monitor import boundary
 from kairos_transcripts.summary import delivery_bundle
-from kairos_transcripts.telegram import validate_bundle
+from kairos_transcripts.telegram import Outbox, notice_bundle, validate_bundle
 
 
 class AllSelectedTests(unittest.TestCase):
@@ -100,3 +100,32 @@ class AllSelectedTests(unittest.TestCase):
         p=self.app.progress(fixture.START.isoformat(),(fixture.START+timedelta(hours=5)).isoformat())
         self.assertEqual((p['known_matching_videos'],p['sent'],p['waiting']), (40,11,29))
         self.assertEqual(p['known_matching_videos'], p['sent']+p['waiting']+p['filtered']+p['delivery_attention'])
+
+    def test_chat_rate_limit_blocks_other_videos_but_not_another_recipient(self):
+        box = Outbox(self.root/'state'/'chat-limits.sqlite3')
+        try:
+            client=Mock(target_hash='target-a')
+            client.send.return_value={'status':'RETRY','retry_at':1030}
+            with patch('kairos_transcripts.telegram.time.time',return_value=1000):
+                first=box.deliver(notice_bundle('a','first'),client)
+                self.assertEqual(first['retry_at'],1060)
+                self.assertEqual(box.deliver(notice_bundle('b','second'),client)['status'],'WAITING_RETRY')
+                self.assertEqual(client.send.call_count,1)
+                other=Mock(target_hash='target-b')
+                other.send.return_value={'status':'SENT','message_id':1}
+                self.assertEqual(box.deliver(notice_bundle('c','other recipient'),other)['status'],'SENT')
+                other.send.assert_called_once()
+            with patch('kairos_transcripts.telegram.time.time',return_value=1061):
+                client.send.return_value={'status':'RETRY','retry_at':1070}
+                self.assertEqual(box.deliver(notice_bundle('a','first'),client)['retry_at'],1181)
+        finally:
+            box.close()
+
+    def test_dispatch_obeys_shared_telegram_pause_before_external_work(self):
+        self.app.add(self.item(),'READY')
+        self.app.db.execute("INSERT INTO meta VALUES ('telegram_source_retry_at','99999999999')")
+        self.app.db.commit()
+        with patch('kairos_transcripts.monitor.subprocess.run') as external:
+            with self.assertRaisesRegex(Problem,'TELEGRAM_SOURCE_COOLDOWN'):
+                self.app.dispatch(fixture.VID)
+            external.assert_not_called()
