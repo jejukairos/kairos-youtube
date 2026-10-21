@@ -290,8 +290,12 @@ class Monitor:
     def stats(self):
         counts = {r[0]: r[1] for r in self.db.execute('SELECT status,count(*) FROM videos GROUP BY status')}
         pending = sum(counts.get(status, 0) for status in PENDING)
-        return {'counts': counts, 'pending': pending,
-                'load_warning': pending >= self.policy['warning_pending_count']}
+        result = {'counts': counts, 'pending': pending,
+                  'load_warning': pending >= self.policy['warning_pending_count']}
+        pause = self.db.execute("SELECT value FROM meta WHERE key='caption_source_retry_at'").fetchone()
+        if pause and float(pause['value']) > time.time():
+            result['caption_source_resume_at_utc'] = datetime.fromtimestamp(float(pause['value']), UTC).isoformat()
+        return result
 
     def recover_gap(self, channel_id, entries=None, metadata=public_metadata):
         channel = next((c for c in self.channels if c['channel_id'] == channel_id), None)
@@ -357,6 +361,10 @@ class Monitor:
             raise Problem('VIDEO_NOT_AVAILABLE_FOR_COLLECTION')
         if row['retry_at'] > time.time():
             raise Problem('VIDEO_WAITING_RETRY')
+        pause = self.db.execute("SELECT value FROM meta WHERE key='caption_source_retry_at'").fetchone()
+        if (pause and float(pause['value']) > time.time()
+                and not (self.root / 'transcripts' / f'{video_id}.json').is_file()):
+            raise Problem('CAPTION_SOURCE_COOLDOWN')
         slot = boundary(datetime.now(UTC)).isoformat()
         budget = self.db.execute('SELECT * FROM run_budget WHERE slot=?', (slot,)).fetchone()
         used_ids = json.loads(budget['video_ids']) if budget else []
@@ -376,6 +384,9 @@ class Monitor:
         else:
             status = 'CAPTION_WAIT'
             retry = time.time() + (86400 if result['status'] in ('AGE_RESTRICTED','UNAVAILABLE','ACCESS_RESTRICTED') else 21600)
+            if result['status'] in ('IP_BLOCKED', 'RATE_LIMITED'):
+                self.db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES ('caption_source_retry_at',?)",
+                                (str(retry),))
         self.db.execute('UPDATE videos SET status=?,reason=?,retry_at=?,attempts=attempts+1 WHERE video_id=?',
                         (status, result['status'], retry, video_id))
         self.db.execute('UPDATE channels SET processed_at=? WHERE channel_id=?', (now(), row['channel_id']))

@@ -96,6 +96,29 @@ class MonitorTests(unittest.TestCase):
                 self.app.collect(VID)
             collect.assert_not_called()
 
+    def test_caption_block_pauses_other_uncached_videos_and_expires(self):
+        self.app.add(self.item()); self.app.add(self.item('n6nO1MkYId0')); self.app.db.commit()
+        with patch('kairos_transcripts.monitor.time.time', return_value=1000):
+            with patch('kairos_transcripts.monitor.collect_batch', return_value=[{'status':'IP_BLOCKED'}]) as collect:
+                self.assertEqual(self.app.collect(VID)['status'], 'IP_BLOCKED')
+                with self.assertRaisesRegex(Problem, 'CAPTION_SOURCE_COOLDOWN'):
+                    self.app.collect('n6nO1MkYId0')
+                self.assertEqual(collect.call_count, 1)
+            self.assertIn('caption_source_resume_at_utc', self.app.stats())
+        with patch('kairos_transcripts.monitor.time.time', return_value=23000):
+            with patch('kairos_transcripts.monitor.collect_batch', return_value=[{'status':'OK','characters':1}]) as collect:
+                self.assertEqual(self.app.collect('n6nO1MkYId0')['status'], 'OK')
+                collect.assert_called_once()
+
+    def test_caption_pause_keeps_cached_material_available(self):
+        self.app.add(self.item()); self.app.db.commit()
+        save_json(self.root / 'transcripts' / f'{VID}.json', transcript())
+        self.app.db.execute("INSERT INTO meta VALUES ('caption_source_retry_at','9999999999')")
+        self.app.db.commit()
+        with patch('kairos_transcripts.monitor.collect_batch', return_value=[{'status':'CACHED','characters':1}]) as collect:
+            self.assertEqual(self.app.collect(VID)['status'], 'CACHED')
+            collect.assert_called_once()
+
     def test_sent_video_cannot_be_revived_by_review(self):
         self.app.add(self.item(),'SENT'); self.app.db.commit()
         with self.assertRaisesRegex(Problem,'NOT_AVAILABLE_FOR_REVIEW'):

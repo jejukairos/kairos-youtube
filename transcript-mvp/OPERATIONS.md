@@ -43,6 +43,9 @@ Windows Python: .venv/Scripts/python.exe
 6. PENDING/CAPTIONS_READY/CAPTION_WAIT 중 실행 가능한 영상에 `monitor.py collect VIDEO_ID`를 실행한다.
    한 슬롯에 최대 8편, 원문 합계 120,000자라는 준비 예산이 코드에 적용된다. 초과한 원문·대기 ID는 보존한다.
    `RUN_*_BUDGET_REACHED`면 그 슬롯의 신규 요약을 종료하고 이월 건수를 알린다. 상한을 임의로 올리지 않는다.
+   자막 제공처가 IP_BLOCKED/RATE_LIMITED를 반환하면 컴퓨터 전체 수집을 6시간 보류한다.
+   status의 caption_source_resume_at_utc를 확인한다. CAPTION_SOURCE_COOLDOWN이면 다른 영상으로 반복 시도하지 않는다.
+   이미 로컬에 저장한 자막의 검토·발송과 공개 RSS 확인은 계속할 수 있다. 보류 중 유료 프록시·로그인 쿠키·다른 경로로 우회하지 않는다.
 7. transcripts/VIDEO_ID.json의 **전체 segments**를 읽는다. 필요하면 출력 범위를 나눠 모두 읽되, 누락한 부분을 본 것처럼 쓰지 않는다.
    `kairos_cli.py prepare transcripts/VIDEO_ID.json`은 원문 전체와 JSON 양식을 summaries/에 만든다.
    이 대화의 모델이 한국어 요약을 summaries/VIDEO_ID.reviewed-draft.json에 직접 작성한다. 유료 AI API를 대신 호출하지 않는다.
