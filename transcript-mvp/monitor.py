@@ -27,6 +27,9 @@ def main():
     review.add_argument('draft', type=Path)
     sub.add_parser('sync')
     sub.add_parser('status')
+    plan = sub.add_parser('plan-backlog')
+    plan.add_argument('--id', required=True)
+    plan.add_argument('--starts', nargs=3, required=True)
     args = p.parse_args()
     root = Path(__file__).resolve().parent
     app = Monitor(root)
@@ -50,6 +53,8 @@ def main():
             result = app.recover_gap(args.channel_id)
         elif args.command == 'notice':
             result = app.notice(args.key, args.message_file.read_text(encoding='utf-8'))
+        elif args.command == 'plan-backlog':
+            result = app.create_backlog_plan(args.id, args.starts)
         else:
             result = app.stats()
         print(json.dumps(result, ensure_ascii=True))

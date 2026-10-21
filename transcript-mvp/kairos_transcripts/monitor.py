@@ -158,6 +158,9 @@ class Monitor:
               status TEXT DEFAULT 'PENDING',reason TEXT,attempts INTEGER DEFAULT 0,
               retry_at REAL DEFAULT 0,request_id TEXT,run_id INTEGER);
             CREATE TABLE IF NOT EXISTS run_budget(slot TEXT PRIMARY KEY,video_ids TEXT,characters INTEGER);
+            CREATE TABLE IF NOT EXISTS backlog_plans(plan_id TEXT PRIMARY KEY,created_at TEXT);
+            CREATE TABLE IF NOT EXISTS backlog_items(video_id TEXT PRIMARY KEY,plan_id TEXT,
+              wave INTEGER,not_before TEXT);
         ''')
         columns = {r[1] for r in self.db.execute('PRAGMA table_info(channels)')}
         if 'processed_at' not in columns:
@@ -298,7 +301,54 @@ class Monitor:
         next_request = self.db.execute("SELECT value FROM meta WHERE key='caption_next_request_at'").fetchone()
         if next_request and float(next_request['value']) > time.time():
             result['caption_next_request_at_utc'] = datetime.fromtimestamp(float(next_request['value']), UTC).isoformat()
+        plan = self.backlog_status()
+        if plan:
+            result['backlog_plan'] = plan
         return result
+
+    def backlog_status(self):
+        rows = self.db.execute("SELECT b.plan_id,b.wave,b.not_before,v.status FROM backlog_items b "
+                               "JOIN videos v ON v.video_id=b.video_id ORDER BY b.wave").fetchall()
+        if not rows:
+            return None
+        waves = {}
+        for row in rows:
+            wave = waves.setdefault(row['wave'], {'wave': row['wave'], 'not_before': row['not_before'],
+                                                  'target': 0, 'sent': 0, 'filtered': 0, 'remaining': 0})
+            wave['target'] += 1
+            key = 'sent' if row['status'] == 'SENT' else 'filtered' if row['status'] == 'FILTERED' else 'remaining'
+            wave[key] += 1
+        return {'plan_id': rows[0]['plan_id'], 'waves': list(waves.values()),
+                'remaining': sum(w['remaining'] for w in waves.values()),
+                'usage_stop_percent': 80, 'max_videos_per_slot': 43, 'max_characters_per_slot': 360000}
+
+    def create_backlog_plan(self, plan_id, starts):
+        if self.backlog_status():
+            return self.backlog_status()
+        stamps = [instant(s) for s in starts]
+        if len(stamps) != 3 or any((b-a).total_seconds() < 18000 for a,b in zip(stamps,stamps[1:])):
+            raise Problem('THREE_SPACED_WAVES_REQUIRED')
+        rows = self.db.execute("SELECT video_id FROM videos WHERE status IN "
+                               "('PENDING','CAPTIONS_READY','CAPTION_WAIT','READY','DISPATCHED','DISPATCH_UNCERTAIN') "
+                               "ORDER BY priority DESC,published_at,video_id").fetchall()
+        if not rows:
+            raise Problem('NO_PENDING_BACKLOG')
+        size = len(rows) // 3
+        with self.db:
+            self.db.execute('INSERT INTO backlog_plans VALUES (?,?)', (plan_id, now()))
+            for i,row in enumerate(rows):
+                wave = 0 if i < size else 1 if i < size*2 else 2
+                self.db.execute('INSERT INTO backlog_items VALUES (?,?,?,?)',
+                                (row['video_id'],plan_id,wave+1,stamps[wave].isoformat()))
+        return self.backlog_status()
+
+    def collection_limits(self, video_id):
+        row = self.db.execute('SELECT not_before FROM backlog_items WHERE video_id=?',(video_id,)).fetchone()
+        if row and instant(row['not_before']) > datetime.now(UTC):
+            raise Problem('BACKLOG_WAVE_NOT_DUE')
+        if row:
+            return 43, 360000
+        return self.policy['max_videos_per_run'], self.policy['max_transcript_characters_per_run']
 
     def recover_gap(self, channel_id, entries=None, metadata=public_metadata):
         channel = next((c for c in self.channels if c['channel_id'] == channel_id), None)
@@ -351,6 +401,12 @@ class Monitor:
                 'channel_id': channel_id, 'checked': checked, 'new_queue_items': added, 'failures': failures}
 
     def queue(self, limit=8):
+        plan = self.backlog_status()
+        if plan and plan['remaining']:
+            return [dict(row) for row in self.db.execute("SELECT v.* FROM videos v JOIN backlog_items b "
+                "ON b.video_id=v.video_id WHERE v.status IN ('PENDING','CAPTIONS_READY','CAPTION_WAIT','READY') "
+                "AND v.retry_at<=? AND b.not_before<=? ORDER BY (v.status='READY') DESC,b.wave,"
+                "v.priority DESC,v.published_at,v.video_id LIMIT ?", (time.time(), now(), limit))]
         return [dict(row) for row in self.db.execute("SELECT v.* FROM videos v LEFT JOIN channels c "
             "ON v.channel_id=c.channel_id WHERE v.status IN "
             "('PENDING','CAPTIONS_READY','CAPTION_WAIT','READY') AND v.retry_at<=? "
@@ -364,6 +420,7 @@ class Monitor:
             raise Problem('VIDEO_NOT_AVAILABLE_FOR_COLLECTION')
         if row['retry_at'] > time.time():
             raise Problem('VIDEO_WAITING_RETRY')
+        video_limit, character_limit = self.collection_limits(video_id)
         pause = self.db.execute("SELECT value FROM meta WHERE key='caption_source_retry_at'").fetchone()
         if (pause and float(pause['value']) > time.time()
                 and not (self.root / 'transcripts' / f'{video_id}.json').is_file()):
@@ -372,7 +429,7 @@ class Monitor:
         budget = self.db.execute('SELECT * FROM run_budget WHERE slot=?', (slot,)).fetchone()
         used_ids = json.loads(budget['video_ids']) if budget else []
         used_chars = budget['characters'] if budget else 0
-        if video_id not in used_ids and len(used_ids) >= self.policy['max_videos_per_run']:
+        if video_id not in used_ids and len(used_ids) >= video_limit:
             raise Problem('RUN_VIDEO_BUDGET_REACHED')
         if not (self.root / 'transcripts' / f'{video_id}.json').is_file():
             # Reserve a shared start time before network I/O; independent CLI
@@ -390,7 +447,7 @@ class Monitor:
         if result['status'] in ('OK', 'CACHED'):
             status, retry = 'CAPTIONS_READY', 0
             if video_id not in used_ids:
-                if used_chars + result['characters'] > self.policy['max_transcript_characters_per_run']:
+                if used_chars + result['characters'] > character_limit:
                     raise Problem('RUN_TEXT_BUDGET_REACHED_TRANSCRIPT_PRESERVED')
                 used_ids.append(video_id)
                 self.db.execute('INSERT OR REPLACE INTO run_budget VALUES (?,?,?)',
@@ -433,6 +490,7 @@ class Monitor:
         row = self.db.execute('SELECT * FROM videos WHERE video_id=?', (video_id,)).fetchone()
         if not row or row['status'] != 'READY' or row['retry_at'] > time.time():
             raise Problem('VIDEO_NOT_READY_FOR_DISPATCH')
+        self.collection_limits(video_id)
         bundle = validate_bundle(read_json(self.root / 'summaries' / f'{video_id}.delivery.json'))
         if bundle.get('kind') == 'notice' or bundle.get('video_id') != video_id:
             raise Problem('SUMMARY_DISPATCH_VIDEO_MISMATCH')
