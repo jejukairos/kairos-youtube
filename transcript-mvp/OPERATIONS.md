@@ -144,3 +144,13 @@ Windows Python: .venv/Scripts/python.exe
 - 시간 표시가 있는 전체 TXT는 kairos_cli.py import-transcript 파일.txt --video-url URL --title 제목 --channel 채널 --output-dir transcripts 명령으로 가져올 수 있다. JSON/SRT/VTT도 지원한다. 시간 없는 텍스트에는 임의 타임스탬프를 만들지 않는다.
 - 검증된 로컬 자막이 있으면 그 영상의 재시도 대기나 수집기 전체 대기 중에도 collect가 외부 접속 없이 CACHED로 준비할 수 있다. SENT/제외/진행 중 영상은 되살리지 않는다. 원문 확보 후 전체 읽기·근거 검토·review·dispatch·sync 절차를 그대로 적용한다.
 - 브라우저 시범 성공 한 편으로 모든 채널의 무료 자동 수집이 복구됐다고 말하지 않는다. 접속 제한과 렌더러/내보내기 호환 문제를 구분하고 실제 발송 건수만 완료로 보고한다.
+
+### 브라우저 원문을 로컬 파일로 옮기기
+
+정상 UI에서 전체 자막이 표시될 때만 `.venv/Scripts/python.exe -m kairos_transcripts.browser_intake`를 실행한다. 127.0.0.1의 임시 포트에만 바인딩되며 시작 출력의 URL을 숨겨진 검증용 브라우저 탭으로 연다. 원문을 외부 서비스에 올리지 않는다.
+
+표시된 자막 DOM에서 시간·본문을 읽어 rows=[{time,text}]와 실제 DOM 개수를 확보한다. 현재 화면의 영상 ID·채널 ID·제목·채널명·재생시간을 대조한다. 원문 문자열은 rows.map(r=>`[${r.time}] ${r.text}`).join('\n')이고, UTF-16 코드 유닛에 FNV-1a(초깃값 2166136261, xor 후 Math.imul(...,16777619)>>>0)로 검증값을 계산한다. 로컬 폼의 전체 자막 JSON에 video_id,channel_id,title,channel,duration_seconds,dom_count,rows,text_checksum(8자리 소문자 16진수)을 입력하고 검증하고 저장을 누른다.
+
+브라우저에서 가져온 배열 개수와 실제 DOM 개수가 다르면 저장이 거절된다. 6시간 전체 방송의 실제 3081구간 중 2000구간만 가져온 사례는 INCOMPLETE_BROWSER_CAPTURE로 실제 거절됐다. 이를 정상 저장이나 전체 원문 검토로 표현하지 않는다. 원문 변경/완료 영상 덮어쓰기/다른 채널/끝부분 미확인도 거절한다. 파일 저장 성공은 분석·발송 완료가 아니며, 저장된 JSON의 전체 segments를 모델이 읽은 후 review를 진행한다.
+
+이 서버는 API·자막 수집·AI·Telegram 호출을 하지 않는 로컬 파일 입력 창이다. 자막 전문을 로그로 출력하거나 Git에 넣지 않는다. 사용이 끝나면 검증용 탭을 닫고 서버 프로세스를 종료한다. 다음 회차에 필요하면 새 임시 포트로 시작한다.
