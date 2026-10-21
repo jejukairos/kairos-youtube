@@ -10,7 +10,7 @@ from kairos_transcripts.summary import evidence_packet
 
 
 def main():
-    p = argparse.ArgumentParser(description='32개 채널 공개 피드 감시; Google·유료 AI API 없음')
+    p = argparse.ArgumentParser(description='등록 채널 공개 피드 감시; Google·유료 AI API 없음')
     sub = p.add_subparsers(dest='command', required=True)
     discover = sub.add_parser('discover')
     discover.add_argument('--until-now', action='store_true')
@@ -22,6 +22,7 @@ def main():
     notice = sub.add_parser('notice')
     notice.add_argument('--key', required=True)
     notice.add_argument('--message-file', type=Path, required=True)
+    notice.add_argument('--photo-video-id')
     review = sub.add_parser('review')
     review.add_argument('video_id')
     review.add_argument('draft', type=Path)
@@ -52,7 +53,7 @@ def main():
         elif args.command == 'recover-gap':
             result = app.recover_gap(args.channel_id)
         elif args.command == 'notice':
-            result = app.notice(args.key, args.message_file.read_text(encoding='utf-8'))
+            result = app.notice(args.key, args.message_file.read_text(encoding='utf-8'), args.photo_video_id)
         elif args.command == 'plan-backlog':
             result = app.create_backlog_plan(args.id, args.starts)
         else:

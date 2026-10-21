@@ -15,6 +15,17 @@ def units(text):
     return len(text.encode('utf-16-le')) // 2
 
 
+def thumbnail_url(video_id):
+    canonical(video_id)
+    return f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg'
+
+
+def photo_card(video_id, channel, title):
+    # Bound metadata independently; preserve the complete clickable original URL.
+    caption = f"📺 {split_message(channel or 'YouTube', 220)[0]}\n📊 {split_message(title or video_id, 650)[0]}\n{canonical(video_id)}"
+    return {'text': caption, 'preview': False, 'photo': thumbnail_url(video_id)}
+
+
 def split_message(text, limit=3800):
     if not 2 <= limit <= 4096:
         raise Problem('INVALID_MESSAGE_LIMIT')
@@ -68,12 +79,22 @@ def validate_bundle(bundle):
                 or not part['text'].strip() or units(part['text']) > 4096
                 or type(part.get('preview')) is not bool):
             raise Problem('INVALID_DELIVERY_PART')
+        if 'photo' in part:
+            photo = part['photo']
+            match = re.fullmatch(r'https://i\.ytimg\.com/vi/([A-Za-z0-9_-]{11})/hqdefault\.jpg',
+                                 photo) if isinstance(photo, str) else None
+            if (not match or units(part['text']) > 1024 or part['preview']
+                    or (not notice and match[1] != bundle['video_id'])
+                    or canonical(match[1]) not in part['text']):
+                raise Problem('INVALID_DELIVERY_PHOTO')
     return bundle
 
 
-def notice_bundle(key, text):
+def notice_bundle(key, text, photo_video_id=None):
     value = {'schema': 1, 'kind': 'notice', 'video_id': 'notice:' + key,
              'parts': [{'text': p, 'preview': False} for p in split_message(text)]}
+    if photo_video_id:
+        value['parts'] = [{'text': text, 'preview': False, 'photo': thumbnail_url(photo_video_id)}]
     value['bundle_hash'] = digest(value)
     return validate_bundle(value)
 
@@ -94,9 +115,15 @@ class Telegram:
         if self.token in part['text']:
             raise Problem('SECRET_IN_MESSAGE')
         try:
-            response = self.session.post(f'https://api.telegram.org/bot{self.token}/sendMessage',
-                json={'chat_id': self.chat_id, 'text': part['text'],
-                      'link_preview_options': {'is_disabled': not part['preview']}},
+            if part.get('photo'):
+                method = 'sendPhoto'
+                payload = {'chat_id': self.chat_id, 'photo': part['photo'], 'caption': part['text']}
+            else:
+                method = 'sendMessage'
+                payload = {'chat_id': self.chat_id, 'text': part['text'],
+                           'link_preview_options': {'is_disabled': not part['preview']}}
+            response = self.session.post(f'https://api.telegram.org/bot{self.token}/{method}',
+                json=payload,
                 timeout=(8, 25), allow_redirects=False)
             body = response.json()
             if (response.status_code == 200 and isinstance(body, dict) and body.get('ok')

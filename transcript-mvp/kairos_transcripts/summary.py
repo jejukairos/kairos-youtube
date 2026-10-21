@@ -180,14 +180,13 @@ def generate_local(transcript, model):
 
 
 def delivery_bundle(value, transcript):
-    from .telegram import split_message
+    from .telegram import photo_card, split_message
     value = validate_summary(value, transcript)
     if value['importance'] < 3 or value['simple_content'] or value.get('duplicate_of'):
         raise Problem('FILTERED_LOW_IMPORTANCE_OR_DUPLICATE')
     # A ready bundle contains only the summary, never the full source captions or secrets.
     # It is an owner-reviewed delivery artifact, not independently verified source evidence.
-    parts = [{'text': f"📺 {value['channel']}\n📊 {value['title']}\n{value['url']}",
-              'preview': True}]
+    parts = [photo_card(value['video_id'], value['channel'], value['title'])]
     parts += [{'text': text, 'preview': False}
               for text in split_message(render_summary(value, transcript))]
     bundle = {'schema': 1, 'video_id': value['video_id'], 'url': value['url'],

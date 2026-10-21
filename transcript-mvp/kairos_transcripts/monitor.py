@@ -143,7 +143,10 @@ class Monitor:
                 raise Problem('NO_PAID_NO_GOOGLE_POLICY_REQUIRED')
         if not self.policy.get('enabled'):
             raise Problem('MONITOR_DISABLED')
-        self.channels = read_json(self.root / 'config/channels.json')['channels']
+        channel_config = read_json(self.root / 'config/channels.json')
+        self.channels = channel_config['channels']
+        self.excluded_channels = set(channel_config.get('excluded_channel_ids', []))
+        self.channel_map = {c['channel_id']: c for c in self.channels}
         if len({c['channel_id'] for c in self.channels}) != len(self.channels):
             raise Problem('DUPLICATE_CHANNEL')
         (self.root / 'state').mkdir(exist_ok=True)
@@ -170,6 +173,35 @@ class Monitor:
             self.db.execute("UPDATE videos SET channel=? WHERE channel_id=? AND channel=''",
                             (channel['name'], channel['channel_id']))
         self.db.commit()
+        self.reconcile_selection()
+
+    def selection_reason(self, item):
+        if item['channel_id'] in self.excluded_channels:
+            return 'CHANNEL_REMOVED_BY_USER'
+        channel = self.channel_map.get(item['channel_id'], {})
+        pattern = channel.get('title_regex')
+        if pattern and not re.search(pattern, item['title']):
+            return 'CHANNEL_SERIES_EXCLUDED'
+        return None
+
+    def reconcile_selection(self):
+        # Preserve SENT and uncertain/in-flight records for dedup and investigation.
+        for row in self.db.execute("SELECT * FROM videos WHERE status IN "
+                                   "('PENDING','CAPTIONS_READY','CAPTION_WAIT','READY')").fetchall():
+            reason = self.selection_reason(row)
+            if reason:
+                self.db.execute("UPDATE videos SET status='FILTERED',reason=? WHERE video_id=?",
+                                (reason, row['video_id']))
+        self.db.commit()
+
+    def channel_start(self, channel):
+        return max(instant(self.policy['initial_since']),
+                   instant(channel.get('initial_since', self.policy['initial_since'])))
+
+    def require_selected(self, row):
+        reason = self.selection_reason(row)
+        if reason:
+            raise Problem(reason)
 
     def close(self):
         self.db.close()
@@ -177,6 +209,9 @@ class Monitor:
     def add(self, item, status='PENDING'):
         video_id = item['video_id']
         canonical(video_id)
+        if status != 'SENT' and self.selection_reason(dict(channel_id=item.get('channel_id', ''),
+                                                         title=item.get('title', ''))):
+            return
         self.db.execute('INSERT OR IGNORE INTO videos '
             '(video_id,published_at,title,channel_id,channel,priority,status) VALUES (?,?,?,?,?,?,?)',
             (video_id, item.get('published_at', self.policy['initial_since']),
@@ -249,6 +284,7 @@ class Monitor:
                         self.db.execute("UPDATE videos SET status='READY',reason='REMOTE_RUN_FINISHED_RECHECK_STATE',retry_at=? WHERE video_id=?",
                                         (time.time() + 60, row['video_id']))
         self.db.commit()
+        self.reconcile_selection()
         return {'status': 'SYNCED', 'records_checked': changed}
 
     def discover(self, end=None, fetcher=public_feed):
@@ -262,6 +298,7 @@ class Monitor:
             results = list(pool.map(fetcher, self.channels))
         for result in results:
             cid = result['channel_id']
+            start = self.channel_start(self.channel_map[cid])
             row = self.db.execute('SELECT * FROM channels WHERE channel_id=?', (cid,)).fetchone()
             cursor = instant(row['cursor']) if row and row['cursor'] else start
             self.db.execute('INSERT OR IGNORE INTO channels(channel_id,cursor) VALUES (?,?)', (cid, start.isoformat()))
@@ -355,7 +392,7 @@ class Monitor:
         if not channel:
             raise Problem('UNKNOWN_CHANNEL')
         entries = public_uploads(channel_id) if entries is None else entries
-        start = instant(self.policy['initial_since'])
+        start = self.channel_start(channel)
         end = datetime.now(UTC)
         added, failures, older, checked, reached_old = 0, [], 0, 0, False
         # The public uploads list is ordered by upload, not a promise of monotonic publish time.
@@ -401,6 +438,7 @@ class Monitor:
                 'channel_id': channel_id, 'checked': checked, 'new_queue_items': added, 'failures': failures}
 
     def queue(self, limit=8):
+        self.reconcile_selection()
         plan = self.backlog_status()
         if plan and plan['remaining']:
             return [dict(row) for row in self.db.execute("SELECT v.* FROM videos v JOIN backlog_items b "
@@ -418,6 +456,7 @@ class Monitor:
         if not row or row['status'] in ('SENT', 'FILTERED', 'DISPATCHED', 'DISPATCH_UNCERTAIN',
                                         'DELIVERY_UNCERTAIN', 'DELIVERY_REJECTED'):
             raise Problem('VIDEO_NOT_AVAILABLE_FOR_COLLECTION')
+        self.require_selected(row)
         if row['retry_at'] > time.time():
             raise Problem('VIDEO_WAITING_RETRY')
         video_limit, character_limit = self.collection_limits(video_id)
@@ -465,9 +504,10 @@ class Monitor:
         return result
 
     def review(self, video_id, draft):
-        row = self.db.execute('SELECT status FROM videos WHERE video_id=?', (video_id,)).fetchone()
+        row = self.db.execute('SELECT * FROM videos WHERE video_id=?', (video_id,)).fetchone()
         if not row or row['status'] not in ('PENDING', 'CAPTIONS_READY', 'CAPTION_WAIT'):
             raise Problem('VIDEO_NOT_AVAILABLE_FOR_REVIEW')
+        self.require_selected(row)
         item = read_json(self.root / 'transcripts' / f'{video_id}.json')
         value = validate_summary(read_json(draft), item)
         value.setdefault('provider', 'codex-scheduled-review')
@@ -490,6 +530,7 @@ class Monitor:
         row = self.db.execute('SELECT * FROM videos WHERE video_id=?', (video_id,)).fetchone()
         if not row or row['status'] != 'READY' or row['retry_at'] > time.time():
             raise Problem('VIDEO_NOT_READY_FOR_DISPATCH')
+        self.require_selected(row)
         self.collection_limits(video_id)
         bundle = validate_bundle(read_json(self.root / 'summaries' / f'{video_id}.delivery.json'))
         if bundle.get('kind') == 'notice' or bundle.get('video_id') != video_id:
@@ -513,12 +554,12 @@ class Monitor:
         self.db.commit()
         return {'status': 'DISPATCHED', 'video_id': video_id, 'request_id': request_id}
 
-    def notice(self, key, message):
+    def notice(self, key, message, photo_video_id=None):
         # Stable keys allow one backlog/usage warning per day, even across retries.
         record = 'notice-dispatched:' + key
         if self.db.execute('SELECT 1 FROM meta WHERE key=?', (record,)).fetchone():
             return {'status': 'NOTICE_ALREADY_REQUESTED', 'notice_key': key}
-        bundle = notice_bundle(key, message)
+        bundle = notice_bundle(key, message, photo_video_id)
         request_id = uuid.uuid4().hex
         inputs = {'bundle': base64.b64encode(json.dumps(bundle, ensure_ascii=False).encode()).decode(),
                   'request_id': request_id}

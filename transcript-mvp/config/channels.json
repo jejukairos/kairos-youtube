@@ -19,18 +19,6 @@
       "priority": 50
     },
     {
-      "channel_id": "UCJo6G1u0e_-wS-JQn3T-zEw",
-      "url": "https://www.youtube.com/@moneymoneycomics",
-      "name": "머니코믹스 Money Comics",
-      "priority": 50
-    },
-    {
-      "channel_id": "UCsJ6RuBiTVWRX156FVbeaGg",
-      "url": "https://www.youtube.com/@syukaworld",
-      "name": "슈카월드",
-      "priority": 50
-    },
-    {
       "channel_id": "UCqai_hueRYiY7d54Jh6ilbQ",
       "url": "https://www.youtube.com/@hodolryinvest",
       "name": "호돌이투자연구소",
@@ -115,12 +103,6 @@
       "priority": 50
     },
     {
-      "channel_id": "UC2GRwEADsEKEX5k-Xg9YphA",
-      "url": "https://www.youtube.com/@theelec9812",
-      "name": "디일렉 THEELEC",
-      "priority": 50
-    },
-    {
       "channel_id": "UC_Ba9K0eQnkh-w-q2ebHynw",
       "url": "https://www.youtube.com/@meritzon",
       "name": "메리츠증권(meritz On)",
@@ -157,12 +139,6 @@
       "priority": 50
     },
     {
-      "channel_id": "UCfnqgWlC5IvJEAPTmyjaixA",
-      "url": "https://www.youtube.com/@supe-tv",
-      "name": "수페TV",
-      "priority": 50
-    },
-    {
       "channel_id": "UCeN2YeJcBCRJoXgzF_OU3qw",
       "url": "https://www.youtube.com/@unrealtech",
       "name": "안될공학 - IT 테크 신기술",
@@ -191,6 +167,35 @@
       "url": "https://www.youtube.com/@ttimestv",
       "name": "티타임즈TV",
       "priority": 50
+    },
+    {
+      "channel_id": "UCxvdCnvGODDyuvnELnLkQWw",
+      "url": "https://www.youtube.com/@hs_academy",
+      "name": "이효석아카데미",
+      "priority": 50,
+      "initial_since": "2026-10-21T03:11:25+00:00"
+    },
+    {
+      "channel_id": "UCpqD9_OJNtF6suPpi6mOQCQ",
+      "url": "https://www.youtube.com/@wsaj",
+      "name": "월가아재의 과학적 투자",
+      "priority": 50,
+      "initial_since": "2026-10-21T03:11:25+00:00"
+    },
+    {
+      "channel_id": "UCGCGxsbmG_9nincyI7xypow",
+      "url": "https://www.youtube.com/@hk_koreamarket",
+      "name": "한경 코리아마켓",
+      "priority": 50,
+      "initial_since": "2026-10-21T03:11:25+00:00",
+      "title_regex": "^\\s*한국경제신문\\s*30\\s*분\\s*만에\\s*읽기(?:\\s|[|｜:：]|$)",
+      "series_note": "라이브 탭의 한국경제신문 30분 만에 읽기만. 다른 방송·클립 제외."
     }
+  ],
+  "excluded_channel_ids": [
+    "UCJo6G1u0e_-wS-JQn3T-zEw",
+    "UCsJ6RuBiTVWRX156FVbeaGg",
+    "UC2GRwEADsEKEX5k-Xg9YphA",
+    "UCfnqgWlC5IvJEAPTmyjaixA"
   ]
 }
