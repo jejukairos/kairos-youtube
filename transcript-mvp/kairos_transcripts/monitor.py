@@ -327,6 +327,31 @@ class Monitor:
         save_json(self.root / 'state/latest-discovery.json', result)
         return result
 
+    def audit(self):
+        """Report actual coverage; a failed lookup never means there were no uploads."""
+        slot = boundary(datetime.now(UTC))
+        channels = []
+        for channel in self.channels:
+            row = self.db.execute('SELECT * FROM channels WHERE channel_id=?',
+                                  (channel['channel_id'],)).fetchone()
+            checked = bool(row and row['last_checked'] and instant(row['last_checked']) >= slot)
+            counts = {r[0]: r[1] for r in self.db.execute(
+                'SELECT status,count(*) FROM videos WHERE channel_id=? GROUP BY status',
+                (channel['channel_id'],))}
+            reason = ('NOT_CHECKED_THIS_SLOT' if not checked else row['last_error'] or
+                      ('COVERAGE_GAP' if row['gap'] else None))
+            channels.append({'channel_id': channel['channel_id'], 'channel': channel['name'],
+                             'checked_this_slot': checked, 'reason': reason,
+                             'pending': sum(counts.get(s, 0) for s in PENDING),
+                             'counts': counts})
+        result = {'slot_utc': slot.isoformat(), 'channels_expected': len(channels),
+                  'channels_checked': sum(c['checked_this_slot'] for c in channels),
+                  'coverage_confirmed': all(not c['reason'] for c in channels),
+                  'issues': [c for c in channels if c['reason']], 'channels': channels,
+                  'pending': self.stats()['pending']}
+        save_json(self.root / 'state/channel-audit.json', result)
+        return result
+
     def stats(self):
         counts = {r[0]: r[1] for r in self.db.execute('SELECT status,count(*) FROM videos GROUP BY status')}
         pending = sum(counts.get(status, 0) for status in PENDING)
@@ -531,6 +556,10 @@ class Monitor:
         if not row or row['status'] != 'READY' or row['retry_at'] > time.time():
             raise Problem('VIDEO_NOT_READY_FOR_DISPATCH')
         self.require_selected(row)
+        if self.policy.get('require_channel_audit_before_dispatch'):
+            audit = self.audit()
+            if audit['channels_checked'] != audit['channels_expected']:
+                raise Problem('CHANNEL_AUDIT_REQUIRED_BEFORE_DISPATCH')
         self.collection_limits(video_id)
         bundle = validate_bundle(read_json(self.root / 'summaries' / f'{video_id}.delivery.json'))
         if bundle.get('kind') == 'notice' or bundle.get('video_id') != video_id:

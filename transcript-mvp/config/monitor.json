@@ -1,5 +1,6 @@
 {
   "enabled": true,
+  "require_channel_audit_before_dispatch": true,
   "timezone": "Asia/Seoul",
   "schedule": [
     "11:00",

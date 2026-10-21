@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import test_monitor as fixture
 from test_pipeline import summary, transcript
 
-from kairos_transcripts.common import Problem, digest, save_json
+from kairos_transcripts.common import Problem, digest, now, save_json
 from kairos_transcripts.monitor import Monitor
 from kairos_transcripts.summary import delivery_bundle
 from kairos_transcripts.telegram import Telegram, notice_bundle, photo_card, units, validate_bundle
@@ -71,6 +71,34 @@ class SelectionTests(unittest.TestCase):
             with self.assertRaisesRegex(Problem, 'CHANNEL_REMOVED_BY_USER'):
                 self.app.dispatch(fixture.VID)
             external.assert_not_called()
+
+    def test_dispatch_requires_current_slot_check_of_every_registered_channel(self):
+        self.app.policy['require_channel_audit_before_dispatch'] = True
+        self.app.add(self.item(), 'READY')
+        with patch('kairos_transcripts.monitor.subprocess.run') as external:
+            with self.assertRaisesRegex(Problem, 'CHANNEL_AUDIT_REQUIRED_BEFORE_DISPATCH'):
+                self.app.dispatch(fixture.VID)
+            external.assert_not_called()
+
+    def test_lookup_failure_is_reported_as_unconfirmed_even_after_check(self):
+        self.app.db.execute('INSERT INTO channels(channel_id,cursor,last_checked,last_error) VALUES (?,?,?,?)',
+                            (fixture.CID, fixture.START.isoformat(), now(), 'PUBLIC_FEED_FAILED'))
+        audit = self.app.audit()
+        self.assertEqual(audit['channels_checked'], 1)
+        self.assertFalse(audit['coverage_confirmed'])
+        self.assertEqual(audit['issues'][0]['reason'], 'PUBLIC_FEED_FAILED')
+
+    def test_checked_channels_allow_validated_summary_dispatch(self):
+        self.app.policy['require_channel_audit_before_dispatch'] = True
+        self.app.add(self.item(), 'READY')
+        self.app.db.execute('INSERT INTO channels(channel_id,cursor,last_checked) VALUES (?,?,?)',
+                            (fixture.CID, fixture.START.isoformat(), now()))
+        self.app.db.commit()
+        save_json(self.root / 'summaries' / f'{fixture.VID}.delivery.json',
+                  delivery_bundle(summary(), transcript()))
+        with patch('kairos_transcripts.monitor.subprocess.run', return_value=Mock(returncode=0)) as external:
+            self.assertEqual(self.app.dispatch(fixture.VID)['status'], 'DISPATCHED')
+            external.assert_called_once()
 
 
 class PhotoTests(unittest.TestCase):

@@ -28,6 +28,7 @@ def main():
     review.add_argument('draft', type=Path)
     sub.add_parser('sync')
     sub.add_parser('status')
+    sub.add_parser('audit')
     plan = sub.add_parser('plan-backlog')
     plan.add_argument('--id', required=True)
     plan.add_argument('--starts', nargs=3, required=True)
@@ -50,6 +51,8 @@ def main():
             result = app.dispatch(args.video_id)
         elif args.command == 'sync':
             result = app.sync()
+        elif args.command == 'audit':
+            result = app.audit()
         elif args.command == 'recover-gap':
             result = app.recover_gap(args.channel_id)
         elif args.command == 'notice':
