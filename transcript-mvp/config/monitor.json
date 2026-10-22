@@ -18,5 +18,5 @@
   "use_gemini": false,
   "use_paid_api": false,
   "delivery_mode": "continuous",
-  "resume_check_minutes": 30
+  "resume_check_minutes": 10
 }
