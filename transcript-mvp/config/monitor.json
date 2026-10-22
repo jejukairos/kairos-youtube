@@ -3,11 +3,7 @@
   "require_channel_audit_before_dispatch": true,
   "require_remote_delivery_idle_before_dispatch": true,
   "timezone": "Asia/Seoul",
-  "schedule": [
-    "11:00",
-    "16:00",
-    "21:00"
-  ],
+  "schedule": [],
   "initial_since": "2026-10-20T02:30:00+00:00",
   "delivery_policy": "all_selected",
   "max_videos_per_run": null,
@@ -20,5 +16,7 @@
   "state_branch": "kairos-youtube-state",
   "use_youtube_data_api": false,
   "use_gemini": false,
-  "use_paid_api": false
+  "use_paid_api": false,
+  "delivery_mode": "continuous",
+  "resume_check_minutes": 30
 }

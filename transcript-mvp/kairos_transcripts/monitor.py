@@ -342,7 +342,9 @@ class Monitor:
 
     def discover(self, end=None, fetcher=public_feed):
         self.bootstrap()
-        end = end or boundary(datetime.now(UTC))
+        if end is None:
+            current = datetime.now(UTC)
+            end = current if self.policy.get('delivery_mode') == 'continuous' else boundary(current)
         start = instant(self.policy['initial_since'])
         if end < start:
             raise Problem('BEFORE_INITIAL_WINDOW')
@@ -492,7 +494,8 @@ class Monitor:
 
     def collection_limits(self, video_id):
         row = self.db.execute('SELECT not_before FROM backlog_items WHERE video_id=?',(video_id,)).fetchone()
-        if row and instant(row['not_before']) > datetime.now(UTC):
+        if (row and self.policy.get('delivery_mode') != 'continuous'
+                and instant(row['not_before']) > datetime.now(UTC)):
             raise Problem('BACKLOG_WAVE_NOT_DUE')
         if self.policy.get('delivery_policy') == 'all_selected':
             return None, None
@@ -558,10 +561,10 @@ class Monitor:
             return [{k: row[k] for k in row.keys() if k != 'description'} for row in self.db.execute(
                 "SELECT v.* FROM videos v LEFT JOIN backlog_items b ON b.video_id=v.video_id "
                 "WHERE v.status IN ('PENDING','CAPTIONS_READY','CAPTION_WAIT','READY') AND v.retry_at<=? "
-                "AND (b.video_id IS NULL OR b.not_before<=?) "
+                "AND (? OR b.video_id IS NULL OR b.not_before<=?) "
                 "ORDER BY (v.status='READY') DESC,(v.status='CAPTIONS_READY') DESC,"
                 "(b.video_id IS NOT NULL) DESC,b.wave,v.priority DESC,v.published_at,v.video_id LIMIT ?",
-                (time.time(), now(), limit))]
+                (time.time(), self.policy.get('delivery_mode') == 'continuous', now(), limit))]
         plan = self.backlog_status()
         if plan and plan['remaining']:
             return [{k: row[k] for k in row.keys() if k != 'description'} for row in self.db.execute("SELECT v.* FROM videos v JOIN backlog_items b "

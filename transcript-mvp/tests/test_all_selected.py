@@ -52,6 +52,28 @@ class AllSelectedTests(unittest.TestCase):
         bundle = json.loads((self.root/'summaries'/f'{fixture.VID}.delivery.json').read_text(encoding='utf-8'))
         self.assertEqual(validate_bundle(bundle)['importance'], 2)
 
+    def test_continuous_delivery_releases_future_waves_but_keeps_retry_and_sent_guards(self):
+        self.app.policy.update(delivery_policy='all_selected', delivery_mode='continuous')
+        for vid, status in [(fixture.VID, 'PENDING'), ('n6nO1MkYId0', 'CAPTION_WAIT'),
+                            ('QslXeEZ0tPI', 'SENT'), ('TORQkD6cwUw', 'FILTERED')]:
+            self.app.add(self.item(vid), status)
+            self.app.db.execute('INSERT INTO backlog_items VALUES (?,?,?,?)',
+                                (vid, 'plan', 3, (datetime.now(UTC)+timedelta(days=1)).isoformat()))
+        self.app.db.execute('UPDATE videos SET retry_at=99999999999 WHERE video_id=?', ('n6nO1MkYId0',))
+        self.app.db.commit()
+        self.assertEqual([r['video_id'] for r in self.app.queue()], [fixture.VID])
+        self.assertEqual(self.app.collection_limits(fixture.VID), (None, None))
+
+    def test_continuous_discovery_includes_uploads_since_the_last_briefing(self):
+        self.app.policy['delivery_mode'] = 'continuous'
+        current = datetime.now(UTC)
+        self.app.policy['initial_since'] = (current-timedelta(days=1)).isoformat()
+        entries = [self.item(fixture.VID, current-timedelta(seconds=1)),
+                   self.item('n6nO1MkYId0', current+timedelta(days=1))]
+        result = self.app.discover(fetcher=lambda c: {'channel_id': fixture.CID, 'videos': entries})
+        self.assertEqual(result['new_queue_items'], 1)
+        self.assertEqual([r['video_id'] for r in self.app.queue()], [fixture.VID])
+
     def test_restore_only_policy_filters_never_removed_or_already_sent(self):
         self.app.policy['delivery_policy'] = 'all_selected'
         for vid,status in [(fixture.VID,'FILTERED'),('n6nO1MkYId0','FILTERED'),('QslXeEZ0tPI','SENT')]:
